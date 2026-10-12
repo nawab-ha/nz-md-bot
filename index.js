@@ -12,20 +12,24 @@ const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
 
+// Configs & Secrets
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAGzvzGfUy6G2yGwIBhV_RnzaayDiEoCUFc";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
 const BOT_NAME = "NAWAB ZADA HACKER MD";
 
-const BANNER_IMAGE = "https://i.ibb.co/3W68688/1001085972.jpg"; 
+// Banner Image URL
+const BANNER_IMAGE = "https://i.ibb.co/3W68688/1001085972.jpg";
 
+// Auto Follow / Required Channels Config
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
     { name: "Channel 2", url: "https://whatsapp.com/channel/0029Vb8rZ5H9Bb62fjLv430d" },
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
+// Anti-Ban Engine Helper
 const randomDelay = (minMs = 1000, maxMs = 3000) => {
     const time = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     return new Promise(resolve => setTimeout(resolve, time));
@@ -33,12 +37,13 @@ const randomDelay = (minMs = 1000, maxMs = 3000) => {
 
 console.log(`[+] ${BOT_NAME} Engine Online...`);
 
+// Telegram Clean /start Command with Photo Banner
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `🦅 *WELCOME TO ${BOT_NAME}* 🦅\n\n` +
                   `👤 *Owner:* ${OWNER_NAME}\n` +
                   `⚙️ *System:* Online & Active (Anti-Ban Enabled 🛡️)\n\n` +
-                  `✨ *Features:* Group Management, AI Tools, Downloads & Utilities[span_2](start_span)[span_2](end_span).\n\n` +
+                  `✨ *Features:* Group Management, AI Tools, Downloads & Utilities.\n\n` +
                   `*WhatsApp Link / Pairing Code lene ke liye command bhejain:*\n\`/pair +923xxxxxxxxx\``;
 
     tgBot.sendPhoto(chatId, BANNER_IMAGE, { 
@@ -49,6 +54,7 @@ tgBot.onText(/\/start/, (msg) => {
     });
 });
 
+// Telegram /pair Command (Multi-User Isolated Sessions Fix)
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let phoneNumber = match[1].replace(/[^0-9]/g, '');
@@ -57,7 +63,13 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         return tgBot.sendMessage(chatId, "❌ *Invalid Number!* Pehle country code ke sath sahi number bhejen.\nExample: `/pair 923472995284`", { parse_mode: 'Markdown' });
     }
 
-    const sessionDir = path.join(__dirname, `session_main`);
+    // FIX: Har chat/user ke liye alag session directory taake multiple numbers ka masla hal ho jaye
+    const sessionDir = path.join(__dirname, `sessions`, `session_${chatId}`);
+    
+    if (fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+    }
+
     const statusMsg = await tgBot.sendMessage(chatId, "🔄 *WhatsApp Server se Pair Code generate ho raha hai...*", { parse_mode: 'Markdown' });
 
     try {
@@ -68,7 +80,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
             version: version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: ["Ubuntu", "Chrome", "20.0.04"], 
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
@@ -78,7 +90,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         sock.ev.on('creds.update', saveCreds);
 
         if (!sock.authState.creds.registered) {
-            await delay(1500);
+            await delay(3000);
             let code = await sock.requestPairingCode(phoneNumber);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
 
@@ -110,8 +122,10 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     }
 });
 
+// WhatsApp Bot Engine & Commands Setup
 function setupWhatsAppEvents(sock) {
 
+    // Automatic Channel Follow on WhatsApp Connection Open
     sock.ev.on('connection.update', async (update) => {
         const { connection } = update;
         if (connection === 'open') {
@@ -129,6 +143,7 @@ function setupWhatsAppEvents(sock) {
         }
     });
 
+    // 1. Group Participant Update (Welcome & Left Message)
     sock.ev.on('group-participants.update', async (anu) => {
         try {
             let metadata = await sock.groupMetadata(anu.id);
@@ -162,6 +177,7 @@ function setupWhatsAppEvents(sock) {
         }
     });
 
+    // 2. WhatsApp Message Commands Handler
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
         if (!m.message || m.key.fromMe) return;
@@ -184,6 +200,7 @@ function setupWhatsAppEvents(sock) {
             await sock.sendPresenceUpdate('recording', from);
         }
 
+        // In-Chat .pair command support
         if (command === '.pair') {
             let inputNum = args[0]?.replace(/[^0-9]/g, '');
             if (!inputNum) {
@@ -201,6 +218,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // Anti-Link Protection Logic
         if (isGroup && (body.includes("chat.whatsapp.com/") || body.includes("whatsapp.com/channel/"))) {
             await sock.sendMessage(from, { delete: m.key });
             await sock.groupParticipantsUpdate(from, [m.key.participant], "remove");
@@ -208,6 +226,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // View Once Message Downloader (.vv)
         if (command === '.vv' || command === '.viewonce' || command === '.once') {
             const quotedMsg = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
             const viewOnceMedia = quotedMsg?.viewOnceMessage?.message || quotedMsg?.viewOnceMessageV2?.message;
@@ -237,6 +256,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // Sticker Converter (.sticker / .s)
         if (command === '.sticker' || command === '.s' || command === '.stick') {
             const quotedMsg = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
             const imageMsg = m.message.imageMessage || quotedMsg?.imageMessage;
@@ -257,7 +277,7 @@ function setupWhatsAppEvents(sock) {
             }
             return;
         }
-        
+
         if (command === '.owner') {
             await sock.sendMessage(from, { text: `🦅 *BOT OWNER DETAILS* 🦅\n\n👤 *Owner:* ${OWNER_NAME}\n🤖 *Bot:* ${BOT_NAME}\n⚡ *Status:* Online & Active` });
             return;
@@ -277,6 +297,7 @@ function setupWhatsAppEvents(sock) {
             process.exit(0);
         }
 
+        // Stylish Welcome Menu with Banner Image (.menu / .help)
         if (command === '.menu' || command === '.help' || command === '.menu home' || command === '.pmenu') {
             const stylishMenu = `
 ╔═════════════════════════╗
@@ -285,7 +306,7 @@ function setupWhatsAppEvents(sock) {
 
 👤 *DEVELOPER:* ${OWNER_NAME}
 ⚙️ *PREFIX:* [ . ]
-🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED[span_4](start_span)[span_4](end_span)
+🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED
 
 📢 *OFFICIAL CHANNELS:*
 1. ${REQUIRED_CHANNELS[0].url}
@@ -316,6 +337,7 @@ _Powered by ${OWNER_NAME}_`;
             return;
         }
 
+        // Group Management Commands Execution
         if (isGroup) {
             switch (command) {
                 case '.ping':
