@@ -5,6 +5,7 @@ const {
     delay, 
     makeCacheableSignalKeyStore,
     downloadMediaMessage,
+    fetchLatestBaileysVersion,
     DisconnectReason 
 } = require("@whiskeysockets/baileys");
 const pino = require('pino');
@@ -16,6 +17,8 @@ const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
 const BOT_NAME = "NAWAB ZADA HACKER MD";
+
+const BANNER_IMAGE = "https://i.ibb.co/3W68688/1001085972.jpg"; 
 
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
@@ -34,11 +37,16 @@ tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `🦅 *WELCOME TO ${BOT_NAME}* 🦅\n\n` +
                   `👤 *Owner:* ${OWNER_NAME}\n` +
-                  `⚙️ *System:* Online & Active (Anti-Ban system)\n\n` +
-                  `✨ *Features:* Group Management, AI Tools, Downloads & Utilities.\n\n` +
+                  `⚙️ *System:* Online & Active (Anti-Ban Enabled 🛡️)\n\n` +
+                  `✨ *Features:* Group Management, AI Tools, Downloads & Utilities[span_2](start_span)[span_2](end_span).\n\n` +
                   `*WhatsApp Link / Pairing Code lene ke liye command bhejain:*\n\`/pair +923xxxxxxxxx\``;
 
-    tgBot.sendMessage(chatId, caption, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    tgBot.sendPhoto(chatId, BANNER_IMAGE, { 
+        caption: caption, 
+        parse_mode: 'Markdown' 
+    }).catch(() => {
+        tgBot.sendMessage(chatId, caption, { parse_mode: 'Markdown' });
+    });
 });
 
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
@@ -54,8 +62,10 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        const { version } = await fetchLatestBaileysVersion();
 
         const sock = makeWASocket({
+            version: version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
             browser: ["Ubuntu", "Chrome", "20.0.04"], 
@@ -67,22 +77,21 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
         sock.ev.on('creds.update', saveCreds);
 
-        await delay(3000);
-
         if (!sock.authState.creds.registered) {
-            const code = await sock.requestPairingCode(phoneNumber);
-            const formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+            await delay(1500);
+            let code = await sock.requestPairingCode(phoneNumber);
+            code = code?.match(/.{1,4}/g)?.join("-") || code;
 
             const responseText = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
                                  `📱 *Number:* \`+${phoneNumber}\`\n` +
-                                 `🔑 *PAIRING CODE:* \`${formattedCode}\`\n\n` +
+                                 `🔑 *PAIRING CODE:* \`${code}\`\n\n` +
                                  `⚠️ *Steps to Connect:*\n` +
                                  `1. WhatsApp kholein -> Linked Devices.\n` +
                                  `2. *Link with Phone Number* par click karein.\n` +
                                  `3. Ye **8-digit Code** enter karein!\n\n` +
                                  `👤 *Owner:* ${OWNER_NAME}`;
 
-            tgBot.editMessageText(responseText, {
+            await tgBot.editMessageText(responseText, {
                 chat_id: chatId,
                 message_id: statusMsg.message_id,
                 parse_mode: 'Markdown'
@@ -168,6 +177,7 @@ function setupWhatsAppEvents(sock) {
         const emojiList = ["🦅", "⚡", "🔥", "👑", "🎯", "🛡️"];
         const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
         await sock.sendMessage(from, { react: { text: randomEmoji, key: m.key } });
+
         if (Math.random() > 0.5) {
             await sock.sendPresenceUpdate('composing', from);
         } else {
@@ -247,7 +257,7 @@ function setupWhatsAppEvents(sock) {
             }
             return;
         }
-
+        
         if (command === '.owner') {
             await sock.sendMessage(from, { text: `🦅 *BOT OWNER DETAILS* 🦅\n\n👤 *Owner:* ${OWNER_NAME}\n🤖 *Bot:* ${BOT_NAME}\n⚡ *Status:* Online & Active` });
             return;
@@ -275,7 +285,7 @@ function setupWhatsAppEvents(sock) {
 
 👤 *DEVELOPER:* ${OWNER_NAME}
 ⚙️ *PREFIX:* [ . ]
-🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED
+🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED[span_4](start_span)[span_4](end_span)
 
 📢 *OFFICIAL CHANNELS:*
 1. ${REQUIRED_CHANNELS[0].url}
@@ -297,7 +307,12 @@ function setupWhatsAppEvents(sock) {
 _Type any command with prefix '.' to execute._
 _Powered by ${OWNER_NAME}_`;
 
-            await sock.sendMessage(from, { text: stylishMenu });
+            await sock.sendMessage(from, { 
+                image: { url: BANNER_IMAGE }, 
+                caption: stylishMenu 
+            }).catch(async () => {
+                await sock.sendMessage(from, { text: stylishMenu });
+            });
             return;
         }
 
