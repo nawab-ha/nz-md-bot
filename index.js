@@ -12,20 +12,24 @@ const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
 
+// Configs & Secrets
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAEqTTw-hpIQAfGoYm__WqKWB2We_0xs8Jk";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
 const BOT_NAME = "NAWAB ZADA HACKER MD";
 
+// Banner Image URL
 const BANNER_IMAGE = "https://i.ibb.co/3W68688/1001085972.jpg";
 
+// Auto Follow / Required Channels Config
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
     { name: "Channel 2", url: "https://whatsapp.com/channel/0029Vb8rZ5H9Bb62fjLv430d" },
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
+// Anti-Ban Engine Helper
 const randomDelay = (minMs = 1000, maxMs = 3000) => {
     const time = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     return new Promise(resolve => setTimeout(resolve, time));
@@ -33,6 +37,7 @@ const randomDelay = (minMs = 1000, maxMs = 3000) => {
 
 console.log(`[+] ${BOT_NAME} Engine Online...`);
 
+// Telegram Clean /start Command with Photo Banner
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `🦅 *WELCOME TO ${BOT_NAME}* 🦅\n\n` +
@@ -49,6 +54,7 @@ tgBot.onText(/\/start/, (msg) => {
     });
 });
 
+// Telegram /pair Command (Fixed Pairing Handshake & Session Sync)
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let phoneNumber = match[1].replace(/[^0-9]/g, '');
@@ -63,7 +69,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         fs.rmSync(sessionDir, { recursive: true, force: true });
     }
 
-    const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Pair Code generating please wait...*", { parse_mode: 'Markdown' });
+    const statusMsg = await tgBot.sendMessage(chatId, "🔄 *WhatsApp Server se Pair Code generate ho raha hai...*", { parse_mode: 'Markdown' });
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -78,11 +84,13 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
             },
-            generateHighQualityLinkPreview: true
+            generateHighQualityLinkPreview: true,
+            markOnlineOnConnect: true
         });
 
         sock.ev.on('creds.update', saveCreds);
 
+        // FIX: Handshake delay aur check taake pairing code 100% register ho jaye
         if (!sock.authState.creds.registered) {
             await delay(4000);
             let code = await sock.requestPairingCode(phoneNumber);
@@ -92,9 +100,9 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                                  `📱 *Number:* \`+${phoneNumber}\`\n` +
                                  `🔑 *PAIRING CODE:* \`${code}\`\n\n` +
                                  `⚠️ *Steps to Connect:*\n` +
-                                 `1. Open WhatsApp -> Linked Devices.\n` +
-                                 `2. *Link with Phone Number* pr click kryn.\n` +
-                                 `3. Ye uper wala **8-digit Code** enter karein!\n\n` +
+                                 `1. WhatsApp kholein -> Linked Devices.\n` +
+                                 `2. *Link with Phone Number* par click karein.\n` +
+                                 `3. Ye **8-digit Code** enter karein!\n\n` +
                                  `👤 *Owner:* ${OWNER_NAME}`;
 
             await tgBot.editMessageText(responseText, {
@@ -104,7 +112,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
             });
         }
 
-        setupWhatsAppEvents(sock);
+        setupWhatsAppEvents(sock, saveCreds);
 
     } catch (error) {
         console.error(error);
@@ -117,7 +125,9 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 });
 
 // WhatsApp Bot Engine & Commands Setup
-function setupWhatsAppEvents(sock) {
+function setupWhatsAppEvents(sock, saveCreds) {
+
+    sock.ev.on('creds.update', saveCreds);
 
     // Automatic Channel Follow on WhatsApp Connection Open
     sock.ev.on('connection.update', async (update) => {
@@ -138,7 +148,7 @@ function setupWhatsAppEvents(sock) {
             let reason = lastDisconnect?.error?.output?.statusCode;
             if (reason !== DisconnectReason.loggedOut) {
                 // Reconnect logic if disconnected unexpectedly
-                setTimeout(() => setupWhatsAppEvents(sock), 5000);
+                setTimeout(() => setupWhatsAppEvents(sock, saveCreds), 5000);
             }
         }
     });
@@ -297,7 +307,7 @@ function setupWhatsAppEvents(sock) {
             process.exit(0);
         }
 
-        // Stylish Welcome Menu with Banner Image (.menu / .help)[span_1](start_span)[span_1](end_span)
+        // Stylish Welcome Menu with Banner Image (.menu / .help)
         if (command === '.menu' || command === '.help' || command === '.menu home' || command === '.pmenu') {
             const stylishMenu = `
 ╔═════════════════════════╗
@@ -306,7 +316,7 @@ function setupWhatsAppEvents(sock) {
 
 👤 *DEVELOPER:* ${OWNER_NAME}
 ⚙️ *PREFIX:* [ . ]
-🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED[span_2](start_span)[span_2](end_span)
+🛡️ *STATUS:* ACTIVE & ANTI-BAN PROTECTED
 
 📢 *OFFICIAL CHANNELS:*
 1. ${REQUIRED_CHANNELS[0].url}
