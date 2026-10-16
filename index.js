@@ -84,15 +84,14 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
             },
-            generateHighQualityLinkPreview: true,
-            markOnlineOnConnect: true
+            generateHighQualityLinkPreview: true
         });
 
         sock.ev.on('creds.update', saveCreds);
 
-        // FIX: Handshake delay aur check taake pairing code 100% register ho jaye
+        // FIX: Handshake delay aur connection check taake pairing code 100% register ho jaye aur logging par na ruke
         if (!sock.authState.creds.registered) {
-            await delay(4000);
+            await delay(6000);
             let code = await sock.requestPairingCode(phoneNumber);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
 
@@ -112,7 +111,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
             });
         }
 
-        setupWhatsAppEvents(sock, saveCreds);
+        setupWhatsAppEvents(sock);
 
     } catch (error) {
         console.error(error);
@@ -125,9 +124,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 });
 
 // WhatsApp Bot Engine & Commands Setup
-function setupWhatsAppEvents(sock, saveCreds) {
-
-    sock.ev.on('creds.update', saveCreds);
+function setupWhatsAppEvents(sock) {
 
     // Automatic Channel Follow on WhatsApp Connection Open
     sock.ev.on('connection.update', async (update) => {
@@ -148,7 +145,7 @@ function setupWhatsAppEvents(sock, saveCreds) {
             let reason = lastDisconnect?.error?.output?.statusCode;
             if (reason !== DisconnectReason.loggedOut) {
                 // Reconnect logic if disconnected unexpectedly
-                setTimeout(() => setupWhatsAppEvents(sock, saveCreds), 5000);
+                setTimeout(() => setupWhatsAppEvents(sock), 5000);
             }
         }
     });
