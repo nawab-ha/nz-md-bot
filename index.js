@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Configs & Secrets
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAEqTTw-hpIQAfGoYm__WqKWB2We_0xs8Jk";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAGJUmttE-9t8sWV_1dHhmRtRDfQHsU0AYc";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
