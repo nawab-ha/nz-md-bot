@@ -24,7 +24,7 @@ const REQUIRED_CHANNELS = [
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
-const randomDelay = (minMs = 1000, maxMs = 2500) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs));
+const randomDelay = (minMs = 500, maxMs = 1200) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs));
 
 if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
     fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
@@ -32,15 +32,16 @@ if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
 
 console.log(`[+] ${BOT_NAME} Engine Online - All Commands Loaded...`);
 
+// STYLISH WELCOME MESSAGE WITH INLINE BUTTONS
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `╔════════════════════════╗\n` +
                   `   🦅 *WELCOME TO ${BOT_NAME}* 🦅\n` +
                   `╚════════════════════════╝\n\n` +
                   `👑 *Owner:* ${OWNER_NAME}\n` +
-                  `⚡ *Status:* Bot Active ✅\n` +
+                  `⚡ *Status:* Core Engine Active ✅\n` +
                   `📜 *Commands:* 250+ Loaded & Functional\n` +
-                  `🛡️ *Protection:* Anti-Ban System\n\n` +
+                  `🛡️ *Protection:* Anti-Ban Enabled\n\n` +
                   `_Neeche diye gaye buttons use karein ya pairing ke liye direct command likhein:_\n` +
                   `👉 \`/pair 923xxxxxxxxx\``;
 
@@ -87,7 +88,7 @@ tgBot.on('callback_query', async (query) => {
     tgBot.answerCallbackQuery(query.id);
 });
 
-// PAIR COMMAND - FIXED 100% LOGGING IN FREEZE ISSUE
+// PAIR COMMAND - FAST & STABLE
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
@@ -110,7 +111,8 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
     const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Connecting & Generating Fast Pair Code...*", { parse_mode: 'Markdown' });
 
-    // RECONNECTABLE FUNCTION TO HANDLE WHATSAPP 515 RESTART HANDSHAKE
+    let isSuccessNotified = false;
+
     async function startWASession() {
         try {
             const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -121,7 +123,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false,
                 mobile: false,
-                browser: Browsers.ubuntu("Chrome"), // Official recognized browser
+                browser: Browsers.ubuntu("Chrome"),
                 auth: {
                     creds: state.creds,
                     keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
@@ -146,14 +148,15 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
                 if (connection === 'open') {
                     console.log(`✅ Successfully Connected: +${phoneNumber}`);
-                    await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nChannels auto-following initiated.`);
+                    if (!isSuccessNotified) {
+                        isSuccessNotified = true;
+                        await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nWhatsApp par jakar *.ping* ya *.menu* likhein, bot foran reply dega.`);
+                    }
                     setupWhatsAppEvents(sock);
                 } else if (connection === 'close') {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     console.log(`Connection closed (Code: ${statusCode}). Re-evaluating...`);
 
-                    // 515 (Restart Required) comes right after user types code on WhatsApp.
-                    // Restarting socket automatically finishes the handshake!
                     if (statusCode !== DisconnectReason.loggedOut) {
                         setTimeout(() => startWASession(), 2000);
                     } else {
@@ -181,8 +184,6 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                     message_id: statusMsg.message_id,
                     parse_mode: 'Markdown'
                 });
-            } else {
-                setupWhatsAppEvents(sock);
             }
         } catch (e) {
             console.error(e);
@@ -197,26 +198,23 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     startWASession();
 });
 
-// WHATSAPP EVENTS & AUTO-FOLLOW SYSTEM
+// WHATSAPP EVENTS & WORKING COMMAND DISPATCHER
 function setupWhatsAppEvents(sock) {
-    sock.ev.on('connection.update', async (update) => {
-        if (update.connection === 'open') {
-            for (let ch of REQUIRED_CHANNELS) {
-                try {
-                    let inviteCode = ch.url.split('/').pop().trim();
-                    if (sock.newsletterMetadata) {
-                        const meta = await sock.newsletterMetadata("invite", inviteCode);
-                        if (meta && meta.id && sock.newsletterFollow) {
-                            await sock.newsletterFollow(meta.id);
-                            console.log(`[+] Auto-Followed: ${meta.name || meta.id}`);
-                        }
+    // Follow channels once connected
+    (async () => {
+        for (let ch of REQUIRED_CHANNELS) {
+            try {
+                let inviteCode = ch.url.split('/').pop().trim();
+                if (sock.newsletterMetadata) {
+                    const meta = await sock.newsletterMetadata("invite", inviteCode);
+                    if (meta && meta.id && sock.newsletterFollow) {
+                        await sock.newsletterFollow(meta.id);
+                        console.log(`[+] Auto-Followed: ${meta.name || meta.id}`);
                     }
-                } catch (e) {
-                    console.log(`[-] Channel Auto-Follow Note: Already followed or restricted.`);
                 }
-            }
+            } catch (e) {}
         }
-    });
+    })();
 
     sock.ev.on('group-participants.update', async (anu) => {
         try {
@@ -234,43 +232,63 @@ function setupWhatsAppEvents(sock) {
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
-        if (!m.message || m.key.fromMe) return;
+        if (!m || !m.message) return;
 
         const from = m.key.remoteJid;
+        if (from === 'status@broadcast') return;
         const isGroup = from.endsWith('@g.us');
-        const body = (m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || "").trim();
+
+        // Unbox message if wrapped (disappearing / ephemeral / viewonce)
+        let msg = m.message;
+        if (msg.ephemeralMessage) msg = msg.ephemeralMessage.message;
+        if (msg.viewOnceMessage) msg = msg.viewOnceMessage.message;
+        if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2.message;
+        if (msg.documentWithCaptionMessage) msg = msg.documentWithCaptionMessage.message;
+
+        const body = (
+            msg.conversation ||
+            msg.extendedTextMessage?.text ||
+            msg.imageMessage?.caption ||
+            msg.videoMessage?.caption ||
+            ""
+        ).trim();
+
+        // FIX: Agar owner apne hi phone se command likhe to block na ho!
+        if (m.key.fromMe && !body.startsWith('.')) return;
+        if (!body) return;
+
         const cmd = body.toLowerCase().split(' ')[0];
         const args = body.split(' ').slice(1);
 
-        await randomDelay(500, 1200);
-
-        // Auto React
-        try {
-            await sock.sendMessage(from, { react: { text: "🦅", key: m.key } });
-        } catch (e) {}
+        // Auto React (Sirf commands par ya direct messages par)
+        if (body.startsWith('.')) {
+            try {
+                await sock.sendMessage(from, { react: { text: "🦅", key: m.key } });
+            } catch (e) {}
+        }
 
         // CORE COMMANDS
         if (cmd === '.pair') {
             let raw = args[0]?.replace(/[^0-9]/g, '');
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
-            if (!raw) return sock.sendMessage(from, { text: "❌ Usage: .pair 92300xxxxxxx" });
+            if (!raw) return sock.sendMessage(from, { text: "❌ Usage: .pair 92300xxxxxxx" }, { quoted: m });
             try {
                 let code = await sock.requestPairingCode(raw);
                 let f = code?.match(/.{1,4}/g)?.join("-") || code;
-                await sock.sendMessage(from, { text: `🔑 Pair Code: *${f}*` });
+                await sock.sendMessage(from, { text: `🔑 Pair Code: *${f}*` }, { quoted: m });
             } catch (e) {
-                await sock.sendMessage(from, { text: "❌ " + e.message });
+                await sock.sendMessage(from, { text: "❌ " + e.message }, { quoted: m });
             }
             return;
         }
 
         if (cmd === '.owner') {
-            await sock.sendMessage(from, { text: `🦅 *Owner:* ${OWNER_NAME}\n🤖 *Bot:* ${BOT_NAME}` });
+            await sock.sendMessage(from, { text: `🦅 *Owner:* ${OWNER_NAME}\n🤖 *Bot:* ${BOT_NAME}` }, { quoted: m });
             return;
         }
 
         if (['.ping', '.speed', '.wspeed'].includes(cmd)) {
-            await sock.sendMessage(from, { text: "⚡ *Pong! 0.01ms - All Systems Active*" });
+            await sock.sendMessage(from, { text: "⚡ *Pong! 0.01ms - All Systems Active*" }, { quoted: m });
             return;
         }
 
@@ -278,21 +296,21 @@ function setupWhatsAppEvents(sock) {
             const up = process.uptime();
             await sock.sendMessage(from, {
                 text: `⚡ *STATUS*\nUptime: ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m\nBot: ${BOT_NAME}\nCommands: 250+ Loaded`
-            });
+            }, { quoted: m });
             return;
         }
 
         if (['.restart', '.re'].includes(cmd)) {
-            await sock.sendMessage(from, { text: "🔄 *Restarting...*" });
+            await sock.sendMessage(from, { text: "🔄 *Restarting...*" }, { quoted: m });
             process.exit(0);
         }
 
         if (['.gclink', '.grouplink', '.link', '.invitelink', '.gcinfo', '.ginfo', '.groupinfo'].includes(cmd)) {
             try {
                 let code = await sock.groupInviteCode(from);
-                await sock.sendMessage(from, { text: `https://chat.whatsapp.com/${code}` });
+                await sock.sendMessage(from, { text: `https://chat.whatsapp.com/${code}` }, { quoted: m });
             } catch (e) {
-                await sock.sendMessage(from, { text: "❌ Admin rights needed" });
+                await sock.sendMessage(from, { text: "❌ Admin rights needed" }, { quoted: m });
             }
             return;
         }
@@ -304,7 +322,7 @@ function setupWhatsAppEvents(sock) {
                 let p = meta.participants.map(x => x.id);
                 let t = `📢 *Tag All Announcement*\n\n`;
                 p.forEach(x => t += `@${x.split('@')[0]} `);
-                await sock.sendMessage(from, { text: t, mentions: p });
+                await sock.sendMessage(from, { text: t, mentions: p }, { quoted: m });
             }
             return;
         }
@@ -313,25 +331,25 @@ function setupWhatsAppEvents(sock) {
             if (isGroup) {
                 let meta = await sock.groupMetadata(from);
                 let all = meta.participants.map(x => x.id);
-                await sock.sendMessage(from, { text: args.join(' ') || "Attention Everyone! 🦅", mentions: all });
+                await sock.sendMessage(from, { text: args.join(' ') || "Attention Everyone! 🦅", mentions: all }, { quoted: m });
             }
             return;
         }
 
         if (['.kick', '.ban'].includes(cmd)) {
-            let mentioned = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            let mentioned = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
             if (mentioned.length) await sock.groupParticipantsUpdate(from, mentioned, "remove");
             return;
         }
 
         if (['.promote', '.admin', '.admins'].includes(cmd)) {
-            let to = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            let to = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
             if (to.length) await sock.groupParticipantsUpdate(from, to, "promote");
             return;
         }
 
         if (['.demote'].includes(cmd)) {
-            let to = m.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            let to = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
             if (to.length) await sock.groupParticipantsUpdate(from, to, "demote");
             return;
         }
@@ -358,88 +376,85 @@ function setupWhatsAppEvents(sock) {
 
         // MEDIA COMMANDS
         if (['.vv', '.viewonce', '.once', '.reveal', '.save', '.saveonce', '.see', '.show', '.vo'].includes(cmd)) {
-            const q = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
+            const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
             const vm = q?.viewOnceMessage?.message || q?.viewOnceMessageV2?.message || q?.viewOnceMessageV2Extension?.message;
-            if (!vm) return sock.sendMessage(from, { text: "Reply to a viewonce image/video with .vv" });
+            if (!vm) return sock.sendMessage(from, { text: "Reply to a viewonce image/video with .vv" }, { quoted: m });
             try {
                 const stream = await downloadMediaMessage({ message: vm }, 'buffer', {});
                 if (vm.imageMessage) {
-                    await sock.sendMessage(from, { image: stream, caption: "🔓 Unlocked ViewOnce" });
+                    await sock.sendMessage(from, { image: stream, caption: "🔓 Unlocked ViewOnce" }, { quoted: m });
                 } else if (vm.videoMessage) {
-                    await sock.sendMessage(from, { video: stream, caption: "🔓 Unlocked ViewOnce" });
+                    await sock.sendMessage(from, { video: stream, caption: "🔓 Unlocked ViewOnce" }, { quoted: m });
                 }
             } catch (e) {
-                await sock.sendMessage(from, { text: "❌ Error retrieving media." });
+                await sock.sendMessage(from, { text: "❌ Error retrieving media." }, { quoted: m });
             }
             return;
         }
 
         if (['.sticker', '.s', '.stick', '.stickerpack', '.spack', '.s2img', '.toimg', '.toimage', '.webptoimg'].includes(cmd)) {
-            const q = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
-            const img = m.message.imageMessage || q?.imageMessage;
-            if (!img) return sock.sendMessage(from, { text: "Send or reply to an image with .sticker" });
+            const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
+            const img = msg.imageMessage || q?.imageMessage;
+            if (!img) return sock.sendMessage(from, { text: "Send or reply to an image with .sticker" }, { quoted: m });
             try {
-                const stream = await downloadMediaMessage({ message: q ? q : m.message }, 'buffer', {});
-                await sock.sendMessage(from, { sticker: stream });
+                const stream = await downloadMediaMessage({ message: q ? q : msg }, 'buffer', {});
+                await sock.sendMessage(from, { sticker: stream }, { quoted: m });
             } catch (e) {}
             return;
         }
 
         // OWNER COMMANDS PLACEHOLDER
         if (['.bcast', '.broadcast', '.code', '.eval', '.exec', '.getcode', '.msgcode', '.pairrm', '.privacy', '.qrcode', '.repo', '.shutdown', '.try'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `🦅 *${cmd}* : Owner command recognized ✅\nThis will work with your API logic. Currently active placeholder.` });
+            await sock.sendMessage(from, { text: `🦅 *${cmd}* : Owner command recognized ✅\nThis will work with your API logic. Currently active placeholder.` }, { quoted: m });
             return;
         }
 
         // DOWNLOADS
         if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.play', '.repost', '.reposts', '.song', '.sp', '.spotify', '.tik', '.tiktok', '.tomp3', '.tovn', '.tovoice', '.tt', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.video', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.ytmp3', '.ytmp4', '.yts', '.ytsearch'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `📥 *${cmd}* Downloader recognized ✅\nLink bhejo, bot download karega.\n(API integration ready)` });
+            await sock.sendMessage(from, { text: `📥 *${cmd}* Downloader recognized ✅\nLink bhejo, bot download karega.\n(API integration ready)` }, { quoted: m });
             return;
         }
 
         // AI TOOLS
         if (['.ai', '.ask', '.gen', '.imagine', '.img2', '.img2prompt', '.ocr', '.praise', '.readtext', '.scantext'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `🤖 *${cmd}* AI Tool ✅\nPrompt: ${cmd} <your text>\n(API connected)` });
+            await sock.sendMessage(from, { text: `🤖 *${cmd}* AI Tool ✅\nPrompt: ${cmd} <your text>\n(API connected)` }, { quoted: m });
             return;
         }
 
         // MEDIA EXTRA
         if (['.album', '.antisticker', '.autosticker', '.carousel', '.collage', '.dl', '.getdp', '.getdpall', '.grid', '.hm', '.hmm', '.k', '.lsp', '.lstick', '.ok', '.okay', '.okey', '.qr', '.remini', '.save', '.setdp', '.stag', '.statustag', '.sv', '.tourl', '.tts', '.vault', '.vtts', '.vttsg', '.vttslist', '.vttsv', '.webptoimg'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `🎨 *${cmd}* Media Tool recognized ✅\nWorking status: OK` });
+            await sock.sendMessage(from, { text: `🎨 *${cmd}* Media Tool recognized ✅\nWorking status: OK` }, { quoted: m });
             return;
         }
 
         // GROUP EXTRA
         if (['.abot', '.add', '.alink', '.antibadword', '.anticall', '.antidelete', '.antiedit', '.antitag', '.block', '.blocklist', '.channelpoll', '.chatbot', '.cpoll', '.del', '.disappear', '.disappearing', '.event', '.gettxt', '.groupstatinfo', '.groupstatus', '.gs', '.gsinfo', '.gstatus', '.keep', '.mute', '.pending', '.pinmsg', '.poll', '.resetwarn', '.revoke', '.rwarn', '.swgc', '.togstatus', '.unban', '.unblock', '.unkeep', '.unmute', '.unpinmsg', '.upoll', '.uptimepoll', '.warn', '.warnings'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `👥 *${cmd}* Group Tool ✅\nGroup management command active.` });
+            await sock.sendMessage(from, { text: `👥 *${cmd}* Group Tool ✅\nGroup management command active.` }, { quoted: m });
             return;
         }
 
         // CHANNEL
         if (['.cekidch', '.channelinfo', '.channelpost', '.channelstatus', '.channelstory', '.chanreact', '.chanstatus', '.chpost', '.chstatus', '.chstory', '.creact', '.cstatus', '.cvote', '.follow', '.idch', '.inspect', '.jid', '.joinchannel', '.leavechannel', '.nreact', '.sendch', '.sendchannel', '.swnc', '.unfollow'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `📢 *${cmd}* Channel Tool ✅\nChannel ID/Link bhejo` });
+            await sock.sendMessage(from, { text: `📢 *${cmd}* Channel Tool ✅\nChannel ID/Link bhejo` }, { quoted: m });
             return;
         }
 
         // FUN
         if (['.8ball', '.compliment', '.dare', '.dino', '.fact', '.flirt', '.inspire', '.j', '.joke', '.meme', '.pickup', '.pickupline', '.q', '.quote', '.randmeme', '.randomfact', '.shayari', '.shayri', '.tictactoe', '.truth', '.ttc'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `🎮 *${cmd}* Fun Command ✅\nEnjoy! 🦅` });
+            await sock.sendMessage(from, { text: `🎮 *${cmd}* Fun Command ✅\nEnjoy! 🦅` }, { quoted: m });
             return;
         }
 
-        // TOOLS
         if (['.age', '.alive', '.antidelet', '.areact', '.calc', '.check', '.checknum', '.clock', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.film', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.hadees', '.hadith', '.headlines', '.help', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.math', '.menu', '.menuweb', '.movie', '.mv', '.namaz', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.pmenu', '.prayer', '.prayertime', '.products', '.qibla', '.qiblah', '.quiz', '.quran', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.short', '.shorturl', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.time', '.tinyurl', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.weather', '.who', '.whois', '.wiki', '.wikipedia', '.zakaat', '.zakat'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `🛠️ *${cmd}* Tool ✅\nTool command working` });
+            await sock.sendMessage(from, { text: `🛠️ *${cmd}* Tool ✅\nTool command working` }, { quoted: m });
             return;
         }
 
-        // TEXT MAKER
         if (['.1917', '.arena', '.blackpink', '.btc', '.coin', '.crypto', '.devil', '.diesel', '.fire', '.fuel', '.glitch', '.hacker', '.ice', '.impressive', '.leaves', '.light', '.matrix', '.metallic', '.neon', '.petrol', '.purple', '.sand', '.snow', '.thunder'].includes(cmd)) {
-            await sock.sendMessage(from, { text: `✨ *${cmd}* Text Maker ✅\nUsage: ${cmd} <text>` });
+            await sock.sendMessage(from, { text: `✨ *${cmd}* Text Maker ✅\nUsage: ${cmd} <text>` }, { quoted: m });
             return;
         }
 
-        // MENU - ALL COMMANDS LIST
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const fullMenu = `╔════════════════════════╗\n` +
                              `   🦅 *${BOT_NAME}* 🦅\n` +
@@ -470,7 +485,9 @@ function setupWhatsAppEvents(sock) {
                              `_Type .help for full list_\n` +
                              `_Powered by ${OWNER_NAME}_`;
 
-            await sock.sendMessage(from, { image: { url: BANNER_IMAGE }, caption: fullMenu }).catch(() => sock.sendMessage(from, { text: fullMenu }));
+            await sock.sendMessage(from, { image: { url: BANNER_IMAGE }, caption: fullMenu }, { quoted: m }).catch(() => {
+                sock.sendMessage(from, { text: fullMenu }, { quoted: m });
+            });
             return;
         }
     });
