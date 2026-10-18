@@ -18,7 +18,7 @@ const http = require('http');
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD - 24/7 ONLINE!`);
+    res.end(`NAWAB ZADA HACKER MD - 24/7 Engine is ONLINE!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Keep-Alive Server running on port ${PORT}`);
 });
@@ -522,17 +522,23 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // MENU - COMPLETE 250+ COMMANDS LIST WITH OWNER PICTURE & BANNER
+        // MENU - ALL-IN-ONE ROYAL FORMAT (USER NAME, BOT NAME, OWNER NAME & FULL 250+ COMMANDS LIST)
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
+            const userName = m.pushName || "Respected User";
+            const senderJid = m.key.participant || from;
+            const userTag = `@${senderJid.split('@')[0]}`;
+
             const fullMenu = `╔════════════════════════╗\n` +
                              `   🦅 *${BOT_NAME}* 🦅\n` +
-                             `╚════════════════════════╝\n` +
-                             `👑 Developer: ${OWNER_NAME}\n` +
-                             `⚙️ Prefix: [ . ] | 24/7 Online ✅\n` +
-                             `📜 Total: 250+ Commands Loaded\n` +
-                             `🛡️ System: Anti-Sleep & Anti-Ban Active\n\n` +
-                             `📢 OFFICIAL CHANNELS:\n` +
-                             `${REQUIRED_CHANNELS.map(c => c.url).join('\n')}\n\n` +
+                             `╚════════════════════════╝\n\n` +
+                             `👋 *Welcome:* ${userName} (${userTag})\n` +
+                             `🤖 *Bot Name:* ${BOT_NAME}\n` +
+                             `👑 *Owner Name:* ${OWNER_NAME}\n` +
+                             `⚙️ *Prefix:* [ . ]\n` +
+                             `⚡ *Engine Status:* 24/7 Anti-Sleep Active ✅\n` +
+                             `📜 *Total Commands:* 250+ Available\n\n` +
+                             `📢 *OFFICIAL CHANNELS:*\n` +
+                             `${REQUIRED_CHANNELS.map(c => `✦ ${c.name}: ${c.url}`).join('\n')}\n\n` +
                              `┌─── ❖ *OWNER COMMANDS* ❖\n` +
                              `│ .bcast, .broadcast, .code, .eval, .exec, .getcode, .msgcode, .owner, .pair, .pairrm, .privacy, .qrcode, .re, .repo, .restart, .shutdown, .try\n` +
                              `├─── ❖ *DOWNLOADS* ❖\n` +
@@ -553,8 +559,12 @@ function setupWhatsAppEvents(sock) {
                              `   .1917, .arena, .blackpink, .btc, .coin, .crypto, .devil, .diesel, .fire, .fuel, .glitch, .hacker, .ice, .impressive, .leaves, .light, .matrix, .metallic, .neon, .petrol, .purple, .sand, .snow, .thunder\n\n` +
                              `> 👑 *Powered by Owner:* ${OWNER_NAME}`;
 
-            await sock.sendMessage(from, { image: { url: BANNER_IMAGE }, caption: fullMenu }, { quoted: m }).catch(() => {
-                sock.sendMessage(from, { text: fullMenu }, { quoted: m });
+            await sock.sendMessage(from, { 
+                image: { url: BANNER_IMAGE }, 
+                caption: fullMenu,
+                mentions: [senderJid]
+            }, { quoted: m }).catch(() => {
+                sock.sendMessage(from, { text: fullMenu, mentions: [senderJid] }, { quoted: m });
             });
             return;
         }
