@@ -31,7 +31,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8647185787:AAFdPPj_YK9xmwN
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
 const BOT_NAME = "NAWAB ZADA HACKER MD";
-const BANNER_IMAGE = "https://i.ibb.co/3W68688/1001085972.jpg";
+const BANNER_IMAGE = "https://i.ibb.co/ycxV3SCM/photo.jpg";
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
     { name: "Channel 2", url: "https://whatsapp.com/channel/0029Vb8rZ5H9Bb62fjLv430d" },
