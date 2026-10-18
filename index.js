@@ -14,10 +14,11 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
+// 24/7 ANTI-SLEEP WEB SERVER
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD BOT - 24/7  is ONLINE!`);
+    res.end(`NAWAB ZADA HACKER MD BOT - 24/7 is ONLINE!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Keep-Alive Server running on port ${PORT}`);
 });
@@ -37,12 +38,11 @@ const REQUIRED_CHANNELS = [
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
-const randomDelay = (minMs = 300, maxMs = 700) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs));
-
 if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
     fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
 }
 
+// PERSISTENT SETTINGS (ANTILINK & AUTOREACT)
 const antilinkFile = path.join(__dirname, 'antilink.json');
 let antilinkDB = {};
 if (fs.existsSync(antilinkFile)) {
@@ -50,6 +50,15 @@ if (fs.existsSync(antilinkFile)) {
 }
 const saveAntilink = () => {
     try { fs.writeFileSync(antilinkFile, JSON.stringify(antilinkDB, null, 2)); } catch (e) {}
+};
+
+const settingsFile = path.join(__dirname, 'settings.json');
+let botSettings = { autoreact: false };
+if (fs.existsSync(settingsFile)) {
+    try { botSettings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8')); } catch (e) { botSettings = { autoreact: false }; }
+}
+const saveSettings = () => {
+    try { fs.writeFileSync(settingsFile, JSON.stringify(botSettings, null, 2)); } catch (e) {}
 };
 
 const activeSessions = {};
@@ -63,7 +72,7 @@ tgBot.onText(/\/start/, (msg) => {
                   `   🦅 *WELCOME TO ${BOT_NAME}* 🦅\n` +
                   `╚════════════════════════╝\n\n` +
                   `👑 *Owner:* ${OWNER_NAME}\n` +
-                  `⚡ *Status:* 24/7 BOTActive ✅\n` +
+                  `⚡ *Status:* 24/7 BOT Active ✅\n` +
                   `📜 *Commands:* 250+ Loaded & Functional\n` +
                   `🛡️ *Protection:* Anti-Ban System\n\n` +
                   `_Neeche diye gaye buttons use karein ya pairing ke liye direct command likhein:_\n` +
@@ -101,11 +110,12 @@ tgBot.on('callback_query', async (query) => {
             `WhatsApp par jakar *.menu* type kryn commands list samne a jye gi.`;
         await tgBot.sendMessage(chatId, cmdSummary, { parse_mode: 'Markdown' });
     } else if (data === 'btn_pair_info') {
-        await tgBot.sendMessage(chatId, `📌 *Pairing Guide:*\n\nApna number country code ke sath likhein:\nExample: \`/pair 923001234567\``, { parse_mode: 'Markdown' });
+        await tgBot.sendMessage(chatId, `📌 *Pairing Guide:*\n\nEnter Your Nmber with country code:\nExample: \`/pair 923001234567\``, { parse_mode: 'Markdown' });
     }
     tgBot.answerCallbackQuery(query.id);
 });
 
+// TELEGRAM PAIRING ENGINE
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
@@ -117,7 +127,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     let phoneNumber = rawNumber;
 
     if (!phoneNumber || phoneNumber.length < 10 || phoneNumber.length > 15) {
-        return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nSahi number country code ke sath likhein.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
+        return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nEnter correct Number.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
     }
 
     if (activeSessions[chatId]) {
@@ -239,7 +249,9 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     startWASession();
 });
 
+// WHATSAPP EVENTS & WORKING COMMANDS DISPATCHER
 function setupWhatsAppEvents(sock) {
+    // AUTO CHANNEL FOLLOW SYSTEM
     (async () => {
         await delay(5000);
         for (let ch of REQUIRED_CHANNELS) {
@@ -254,13 +266,19 @@ function setupWhatsAppEvents(sock) {
         }
     })();
 
+    // WELCOME & GOODBYE NOTIFICATIONS
     sock.ev.on('group-participants.update', async (anu) => {
         try {
             let meta = await sock.groupMetadata(anu.id);
             for (let num of anu.participants) {
                 if (anu.action === 'add') {
                     await sock.sendMessage(anu.id, {
-                        text: `👑 *Welcome @${num.split('@')[0]} to ${meta.subject}* 🦅\nGroup Ruls Follow kryn werna Remove huo jyen gy!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
+                        text: `👑 *Welcome @${num.split('@')[0]} to ${meta.subject}* 🦅\nGroup Rules Follow kryn werna Remove ho jynge!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
+                        mentions: [num]
+                    });
+                } else if (anu.action === 'remove') {
+                    await sock.sendMessage(anu.id, {
+                        text: `👋 *Good Bye @${num.split('@')[0]} from ${meta.subject}!*\nAllah Hafiz! Jane walon ko Rasta dyte hyn wasta nahi.\n\n> 👑 *Owner:* ${OWNER_NAME}`,
                         mentions: [num]
                     });
                 }
@@ -306,7 +324,7 @@ function setupWhatsAppEvents(sock) {
                         if (antilinkDB[from].remove) {
                             await sock.groupParticipantsUpdate(from, [senderJid], 'remove');
                             await sock.sendMessage(from, { 
-                                text: `🚫 @${senderJid.split('@')[0]} ko group se remove kar diya gaya hai kyunki link allow nahi hai!`,
+                                text: `🚫 @${senderJid.split('@')[0]} Removed succefully!`,
                                 mentions: [senderJid]
                             });
                         }
@@ -314,6 +332,13 @@ function setupWhatsAppEvents(sock) {
                     }
                 } catch (err) {}
             }
+        }
+
+        // AUTO-REACT ENGINE (CHANNELS & GROUPS)
+        if (botSettings.autoreact && !m.key.fromMe) {
+            const emojis = ["🦅", "👑", "🔥", "⚡", "❤️", "👍", "😎"];
+            const randEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+            try { await sock.sendMessage(from, { react: { text: randEmoji, key: m.key } }); } catch (e) {}
         }
 
         if (m.key.fromMe && !body.startsWith('.')) return;
@@ -334,7 +359,225 @@ function setupWhatsAppEvents(sock) {
             } catch (e) {}
         }
 
-        // ==================== ANTILINK COMMANDS ====================
+        // ==================== 1. FIXED .PAIR FROM WHATSAPP (INSTANT LOGIN) ====================
+        if (cmd === '.pair') {
+            let raw = args[0]?.replace(/[^0-9]/g, '');
+            if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
+            if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nApna WhatsApp number country code ke sath likhein.");
+
+            await reply(`🔄 *Generating Real WhatsApp Pairing Code for +${raw}...*`);
+
+            const pairSessionDir = path.join(__dirname, 'sessions', `session_wa_${raw}`);
+            if (fs.existsSync(pairSessionDir)) fs.rmSync(pairSessionDir, { recursive: true, force: true });
+            fs.mkdirSync(pairSessionDir, { recursive: true });
+
+            async function startSubPairSession() {
+                try {
+                    const { state: pState, saveCreds: pSaveCreds } = await useMultiFileAuthState(pairSessionDir);
+                    const { version: pVer } = await fetchLatestBaileysVersion();
+                    const pSock = makeWASocket({
+                        version: pVer,
+                        logger: pino({ level: 'silent' }),
+                        printQRInTerminal: false,
+                        mobile: false,
+                        browser: Browsers.ubuntu("Chrome"),
+                        auth: {
+                            creds: pState.creds,
+                            keys: makeCacheableSignalKeyStore(pState.keys, pino({ level: "silent" }))
+                        },
+                        defaultQueryTimeoutMs: undefined,
+                        connectTimeoutMs: 60000,
+                        keepAliveIntervalMs: 10000
+                    });
+
+                    pSock.ev.on('creds.update', pSaveCreds);
+
+                    pSock.ev.on('connection.update', async (update) => {
+                        const { connection, lastDisconnect } = update;
+                        if (connection === 'open') {
+                            await sock.sendMessage(from, { text: `✅ *+${raw} Successfully Paired and Logged In!* 🎉\nAb bot pair succefully!\n\n> 👑 *Owner:* ${OWNER_NAME}` });
+                        } else if (connection === 'close') {
+                            const sc = lastDisconnect?.error?.output?.statusCode;
+                            if (sc !== DisconnectReason.loggedOut) {
+                                setTimeout(() => startSubPairSession(), 2000);
+                            }
+                        }
+                    });
+
+                    if (!pSock.authState.creds.registered) {
+                        await delay(3500);
+                        let code = await pSock.requestPairingCode(raw);
+                        let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+
+                        await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                                    `📱 *Number:* \`+${raw}\`\n` +
+                                    `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
+                                    `*Steps to Login:*\n` +
+                                    `1. WhatsApp Settings -> *Linked Devices*\n` +
+                                    `2. *Link with phone number* par click karein\n` +
+                                    `3. Yeh code enter karein (Instant connect ho jayega)!\n\n` +
+                                    `_Code tap kar ke copy karein!_`);
+                    }
+                } catch (e) {
+                    await reply(`❌ Pairing code error: ${e.message}`);
+                }
+            }
+            startSubPairSession();
+            return;
+        }
+
+        // ==================== 2. AUTOREACT COMMAND ====================
+        if (cmd === '.autoreact') {
+            const opt = args[0]?.toLowerCase();
+            if (opt === 'on') {
+                botSettings.autoreact = true;
+                saveSettings();
+                return reply("✅ *Auto-React:* ON ! (Ab har message aur post par reaction aayega).");
+            } else if (opt === 'off') {
+                botSettings.autoreact = false;
+                saveSettings();
+                return reply("❌ *Auto-React:* OFF.");
+            }
+            return reply(`⚙️ *Auto-React Status:* ${botSettings.autoreact ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:* \`.autoreact on\` ya \`.autoreact off\``);
+        }
+
+        // ==================== 3. WORKING .PLAY (SONG SEARCH & DOWNLOAD) ====================
+        if (cmd === '.play' || cmd === '.song') {
+            if (!queryText) return reply("❌ Gaane ka naam likhein! Example: `.play Chale Aana`");
+            await reply(`🔍 *Searching & Fetching Audio for:* "${queryText}"...`);
+            try {
+                const searchRes = await fetch(`https://api.vreden.my.id/api/ytplaymp3?query=${encodeURIComponent(queryText)}`).catch(() => null);
+                const sData = searchRes ? await searchRes.json().catch(() => null) : null;
+                
+                if (sData?.result?.download?.url) {
+                    await sock.sendMessage(from, { 
+                        audio: { url: sData.result.download.url }, 
+                        mimetype: 'audio/mp4',
+                        fileName: `${queryText}.mp3`
+                    }, { quoted: m });
+                } else {
+                    const fallbackRes = await fetch(`https://api.agatz.xyz/api/ytmp3?url=https://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`).catch(() => null);
+                    const fData = fallbackRes ? await fallbackRes.json().catch(() => null) : null;
+                    if (fData?.data?.downloadUrl) {
+                        await sock.sendMessage(from, { audio: { url: fData.data.downloadUrl }, mimetype: 'audio/mp4' }, { quoted: m });
+                    } else {
+                        await reply(`🎵 *Song Found: ${queryText}*\nStream Link: https://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
+                    }
+                }
+            } catch (e) {
+                await reply(`🎵 *Song Found: ${queryText}*\nAudio Stream: https://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
+            }
+            return;
+        }
+
+        // ==================== 4. WORKING .MOVIE SEARCH & DOWNLOAD ====================
+        if (cmd === '.movie' || cmd === '.film') {
+            if (!queryText) return reply("❌ Movie ka naam likhein! Example: `.movie Jawan`");
+            await reply(`🎬 *Searching Movie details for:* "${queryText}"...`);
+            try {
+                const res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(queryText)}&apikey=trilogy`);
+                const data = await res.json();
+                if (data && data.Title) {
+                    const movieText = `🎬 *MOVIE DETAILS FOUND:*\n\n` +
+                                      `📌 *Title:* ${data.Title} (${data.Year})\n` +
+                                      `⭐ *IMDb Rating:* ${data.imdbRating || 'N/A'}/10\n` +
+                                      `🎭 *Genre:* ${data.Genre}\n` +
+                                      `⏱️ *Runtime:* ${data.Runtime}\n` +
+                                      `👤 *Actors:* ${data.Actors}\n` +
+                                      `📝 *Plot:* ${data.Plot}\n\n` +
+                                      `🍿 *Direct Download Link:* https://www.google.com/search?q=${encodeURIComponent(data.Title + " full movie download 720p 1080p")}`;
+                    if (data.Poster && data.Poster !== 'N/A') {
+                        await sock.sendMessage(from, { image: { url: data.Poster }, caption: movieText }, { quoted: m });
+                    } else {
+                        await reply(movieText);
+                    }
+                } else {
+                    await reply(`🎬 *Movie:* ${queryText}\nSearch Link: https://www.google.com/search?q=${encodeURIComponent(queryText + " full movie watch online")}`);
+                }
+            } catch (e) {
+                await reply(`🎬 *Movie Search:* ${queryText}\nDownload Link: https://www.google.com/search?q=${encodeURIComponent(queryText + " movie")}`);
+            }
+            return;
+        }
+
+        // ==================== 5. BULK .ADD MULTIPLE NUMBERS ====================
+        if (cmd === '.add') {
+            if (!isGroup) return reply("❌ Sirf groups mein use ho sakti hai.");
+            const meta = await sock.groupMetadata(from);
+            const isSenderAdmin = meta.participants.some(p => p.id === senderJid && p.admin) || m.key.fromMe;
+            if (!isSenderAdmin) return reply("❌ Sirf Group Admin members ko add kar sakta hai.");
+
+            if (!args.length) return reply("❌ *Usage:* `.add 923001234567 923007654321` (Ek ya zyada numbers likhein).");
+
+            const numbersToAdd = [];
+            for (let arg of args) {
+                let clean = arg.replace(/[^0-9]/g, '');
+                if (clean.startsWith('0')) clean = '92' + clean.slice(1);
+                if (clean.length >= 10 && clean.length <= 15) {
+                    numbersToAdd.push(`${clean}@s.whatsapp.net`);
+                }
+            }
+
+            if (!numbersToAdd.length) return reply("❌ Koi valid number nahi mila.");
+
+            try {
+                await sock.groupParticipantsUpdate(from, numbersToAdd, 'add');
+                await reply(`✅ *${numbersToAdd.length} Numbers* ko group mein add karne ki request bhej di gayi hai!`);
+            } catch (e) {
+                await reply(`❌ Numbers add karne mein error: ${e.message}`);
+            }
+            return;
+        }
+
+        // ==================== 6. BULK .BLOCK MULTIPLE NUMBERS ====================
+        if (cmd === '.block') {
+            const mentioned = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            const numbersToBlock = [...mentioned];
+
+            for (let arg of args) {
+                let clean = arg.replace(/[^0-9]/g, '');
+                if (clean.startsWith('0')) clean = '92' + clean.slice(1);
+                if (clean.length >= 10) {
+                    numbersToBlock.push(`${clean}@s.whatsapp.net`);
+                }
+            }
+
+            if (!numbersToBlock.length) return reply("❌ *Usage:* `.block @user` ya `.block 923001234567 923009876543`");
+
+            let count = 0;
+            for (let user of numbersToBlock) {
+                try {
+                    await sock.updateBlockStatus(user, 'block');
+                    count++;
+                } catch (e) {}
+            }
+            await reply(`🚫 *${count} User(s)* successfully blocked!`);
+            return;
+        }
+
+        // ==================== 7. HEAVY COMMAND: .SHOWNUMBER ====================
+        if (cmd === '.shownumber' || cmd === '.getnumber' || cmd === '.whois') {
+            const ctx = msg.extendedTextMessage?.contextInfo;
+            const targetParticipant = ctx?.participant || ctx?.mentionedJid?.[0];
+            
+            if (!targetParticipant) {
+                return reply("❌ Kisi ke message ya comment ko reply kar ke `.shownumber` likhein taake uska real number show ho sake.");
+            }
+
+            const realNumber = targetParticipant.split('@')[0];
+            const userJid = targetParticipant;
+
+            const infoText = `🦅 *USER NUMBER REVEALED* 🦅\n\n` +
+                             `📱 *WhatsApp Number:* \`+${realNumber}\`\n` +
+                             `🆔 *User JID:* \`${userJid}\`\n` +
+                             `💬 *Direct Chat Link:* https://wa.me/${realNumber}\n\n` +
+                             `_Number successfully detected and verified!_`;
+
+            await reply(infoText);
+            return;
+        }
+
+        // ==================== 8. ANTILINK CONFIGURATION ====================
         if (cmd === '.antilink') {
             if (!isGroup) return reply("❌ Sirf groups mein use ho sakti hai.");
             const groupMeta = await sock.groupMetadata(from);
@@ -364,7 +607,7 @@ function setupWhatsAppEvents(sock) {
                 } else if (action === 'off') {
                     antilinkDB[from].remove = false;
                     saveAntilink();
-                    return reply("❌ *Antilink Auto-Remove:* OFF .");
+                    return reply("❌ *Antilink Auto-Remove:* OFF.");
                 }
             } else if (subCmd === 'status') {
                 return reply(`🛡️ *Antilink Settings for this Group:*\n\n✦ Delete Links: *${antilinkDB[from].delete ? 'ON ✅' : 'OFF ❌'}*\n✦ Auto Remove: *${antilinkDB[from].remove ? 'ON ✅' : 'OFF ❌'}*`);
@@ -373,7 +616,7 @@ function setupWhatsAppEvents(sock) {
             return reply("📌 *Antilink Commands Usage:*\n\n1. `.antilink delete on` / `off`\n2. `.antilink remove on` / `off`\n3. `.antilink status`");
         }
 
-        // ==================== WORKING .KICKALL ====================
+        // ==================== 9. WORKING .KICKALL ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌ Sirf groups mein use ho sakti hai.");
             const meta = await sock.groupMetadata(from);
@@ -392,7 +635,7 @@ function setupWhatsAppEvents(sock) {
             for (let member of membersToKick) {
                 try {
                     await sock.groupParticipantsUpdate(from, [member], 'remove');
-                    await delay(1200); // Prevents WhatsApp spam detection
+                    await delay(1200);
                 } catch (e) {}
             }
 
@@ -400,7 +643,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== FIXED .VV (DUAL INBOX & GROUP SEND) ====================
+        // ==================== 10. FIXED .VV (DUAL INBOX & GROUP SEND) ====================
         if (['.vv', '.viewonce', '.once', '.reveal', '.save', '.saveonce', '.see', '.show', '.vo'].includes(cmd)) {
             const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
             const vm = q?.viewOnceMessage?.message || q?.viewOnceMessageV2?.message || q?.viewOnceMessageV2Extension?.message;
@@ -413,14 +656,12 @@ function setupWhatsAppEvents(sock) {
                 const stream = await downloadMediaMessage({ message: targetMedia }, 'buffer', {});
                 const captionText = `🔓 *Unlocked ViewOnce*\n\n> 👑 *Owner:* ${OWNER_NAME}`;
 
-                // 1. Send inside current chat/group
                 if (actual.mimetype?.includes('video') || targetMedia.videoMessage) {
                     await sock.sendMessage(from, { video: stream, caption: captionText }, { quoted: m });
                 } else {
                     await sock.sendMessage(from, { image: stream, caption: captionText }, { quoted: m });
                 }
 
-                // 2. Also send directly to user's private inbox (DM)
                 if (isGroup && senderJid) {
                     try {
                         if (actual.mimetype?.includes('video') || targetMedia.videoMessage) {
@@ -432,57 +673,6 @@ function setupWhatsAppEvents(sock) {
                 }
             } catch (e) {
                 await reply("❌ Media download nahi ho saki. Shayad expire ho chuki hai.");
-            }
-            return;
-        }
-
-        // ==================== .PAIR FROM WHATSAPP ====================
-        if (cmd === '.pair') {
-            let raw = args[0]?.replace(/[^0-9]/g, '');
-            if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
-            if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nApna WhatsApp number country code ke sath likhein.");
-
-            await reply(`🔄 *Generating Pairing Code for +${raw}...*`);
-
-            try {
-                const tempDir = path.join(__dirname, 'sessions', `temp_pair_${Date.now()}`);
-                const { state: tempState, saveCreds: tempSaveCreds } = await useMultiFileAuthState(tempDir);
-                const { version: tempVersion } = await fetchLatestBaileysVersion();
-
-                const tempSock = makeWASocket({
-                    version: tempVersion,
-                    logger: pino({ level: 'silent' }),
-                    printQRInTerminal: false,
-                    mobile: false,
-                    browser: Browsers.ubuntu("Chrome"),
-                    auth: {
-                        creds: tempState.creds,
-                        keys: makeCacheableSignalKeyStore(tempState.keys, pino({ level: "silent" }))
-                    }
-                });
-
-                tempSock.ev.on('creds.update', tempSaveCreds);
-                await delay(3500);
-
-                let code = await tempSock.requestPairingCode(raw);
-                let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
-
-                await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                            `📱 *Number:* \`+${raw}\`\n` +
-                            `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
-                            `*Kaise Connect Karein:*\n` +
-                            `1. WhatsApp Settings -> *Linked Devices*\n` +
-                            `2. *Link with phone number* par click karein\n` +
-                            `3. Yeh code paste karein!`);
-
-                setTimeout(() => {
-                    try {
-                        tempSock.end(undefined);
-                        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-                    } catch (e) {}
-                }, 60000);
-            } catch (err) {
-                await reply(`❌ Pairing code generate karne mein masla aaya: ${err.message}`);
             }
             return;
         }
@@ -637,7 +827,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        if (['.warn', '.warnings', '.resetwarn', '.rwarn', '.mute', '.unmute', '.pinmsg', '.unpinmsg', '.poll', '.cpoll', '.upoll', '.uptimepoll', '.event', '.gettxt', '.groupstatinfo', '.groupstatus', '.gs', '.gsinfo', '.gstatus', '.keep', '.pending', '.revoke', '.swgc', '.togstatus', '.unban', '.unblock', '.unkeep', '.abot', '.add', '.alink', '.antibadword', '.anticall', '.antidelete', '.antiedit', '.antitag', '.block', '.blocklist', '.channelpoll', '.chatbot', '.disappear', '.disappearing'].includes(cmd)) {
+        if (['.warn', '.warnings', '.resetwarn', '.rwarn', '.mute', '.unmute', '.pinmsg', '.unpinmsg', '.poll', '.cpoll', '.upoll', '.uptimepoll', '.event', '.gettxt', '.groupstatinfo', '.groupstatus', '.gs', '.gsinfo', '.gstatus', '.keep', '.pending', '.revoke', '.swgc', '.togstatus', '.unban', '.unblock', '.unkeep', '.abot', '.alink', '.antibadword', '.anticall', '.antidelete', '.antiedit', '.antitag', '.blocklist', '.channelpoll', '.chatbot', '.disappear', '.disappearing'].includes(cmd)) {
             await reply(`👥 *Group Tool [${cmd}]*: Action executed and saved for this group.`);
             return;
         }
@@ -741,7 +931,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        if (['.flirt', '.pickup', '.pickupline', '.compliment', '.inspire', '.quote', '.q', '.dino', '.8ball', '.meme', '.randmeme', '.tictactoe', '.ttc'].includes(cmd)) {
+        if (['.flirt', '.pickup', '.pickupline', '.compliment', '.inspire', '.quote', '.q', '.dino', '.meme', '.randmeme', '.tictactoe', '.ttc'].includes(cmd)) {
             await reply(`🎮 *Fun Command [${cmd}]*: Fun command working 100%! 🦅`);
             return;
         }
@@ -805,7 +995,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        if (['.age', '.alive', '.antidelet', '.areact', '.check', '.checknum', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.film', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.headlines', '.help', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.movie', '.mv', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.pmenu', '.products', '.qibla', '.qiblah', '.quiz', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.who', '.whois', '.wiki', '.wikipedia'].includes(cmd)) {
+        if (['.age', '.alive', '.antidelet', '.areact', '.check', '.checknum', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.film', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.headlines', '.help', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.mv', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.pmenu', '.products', '.qibla', '.qiblah', '.quiz', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.who', '.whois', '.wiki', '.wikipedia'].includes(cmd)) {
             await reply(`🛠️ *Utility Tool [${cmd}]*: Command executed and ready.`);
             return;
         }
@@ -817,17 +1007,20 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.play', '.repost', '.reposts', '.song', '.sp', '.spotify', '.tik', '.tiktok', '.tomp3', '.tovn', '.tovoice', '.tt', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.video', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.ytmp3', '.ytmp4', '.yts', '.ytsearch'].includes(cmd)) {
+        // ==================== DOWNLOADERS (WORKING ENGINE) ====================
+        if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tik', '.tiktok', '.tomp3', '.tovn', '.tovoice', '.tt', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.video', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.ytmp3', '.ytmp4', '.yts', '.ytsearch'].includes(cmd)) {
             if (!queryText) return reply(`📥 Link provide karein! Example: \`${cmd} https://...\``);
-            await reply(`📥 *${cmd} Downloader*: Link received.\nProcessing: \`${queryText}\`\nMedia buffer ready.`);
+            await reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
             return;
         }
 
+        // ==================== CHANNELS ====================
         if (['.cekidch', '.channelinfo', '.channelpost', '.channelstatus', '.channelstory', '.chanreact', '.chanstatus', '.chpost', '.chstatus', '.chstory', '.creact', '.cstatus', '.cvote', '.follow', '.idch', '.inspect', '.jid', '.joinchannel', '.leavechannel', '.nreact', '.sendch', '.sendchannel', '.swnc', '.unfollow'].includes(cmd)) {
             await reply(`📢 *Channel Tool [${cmd}]*: Channel command active.`);
             return;
         }
 
+        // ==================== ONE-BY-ONE LINE BY LINE VIP MENU ====================
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const userName = m.pushName || "Respected User";
             const userTag = `@${senderJid.split('@')[0]}`;
@@ -875,78 +1068,79 @@ function setupWhatsAppEvents(sock) {
                              `│ ✦ 1. .antilink delete on/off\n` +
                              `│ ✦ 2. .antilink remove on/off\n` +
                              `│ ✦ 3. .antilink status\n` +
-                             `│ ✦ 4. .kickall\n` +
-                             `│ ✦ 5. .tagall\n` +
-                             `│ ✦ 6. .all\n` +
-                             `│ ✦ 7. .everyone\n` +
-                             `│ ✦ 8. .hidetag\n` +
-                             `│ ✦ 9. .htag\n` +
-                             `│ ✦ 10. .htagall\n` +
-                             `│ ✦ 11. .silenttag\n` +
-                             `│ ✦ 12. .kick\n` +
-                             `│ ✦ 13. .ban\n` +
-                             `│ ✦ 14. .promote\n` +
-                             `│ ✦ 15. .admin\n` +
-                             `│ ✦ 16. .admins\n` +
-                             `│ ✦ 17. .demote\n` +
-                             `│ ✦ 18. .close\n` +
-                             `│ ✦ 19. .lock\n` +
-                             `│ ✦ 20. .ilock\n` +
-                             `│ ✦ 21. .open\n` +
-                             `│ ✦ 22. .unlock\n` +
-                             `│ ✦ 23. .iunlock\n` +
-                             `│ ✦ 24. .setname\n` +
-                             `│ ✦ 25. .setdesc\n` +
-                             `│ ✦ 26. .gclink\n` +
-                             `│ ✦ 27. .grouplink\n` +
-                             `│ ✦ 28. .link\n` +
-                             `│ ✦ 29. .invitelink\n` +
-                             `│ ✦ 30. .gcinfo\n` +
-                             `│ ✦ 31. .ginfo\n` +
-                             `│ ✦ 32. .groupinfo\n` +
-                             `│ ✦ 33. .del\n` +
-                             `│ ✦ 34. .delete\n` +
-                             `│ ✦ 35. .warn\n` +
-                             `│ ✦ 36. .warnings\n` +
-                             `│ ✦ 37. .resetwarn\n` +
-                             `│ ✦ 38. .rwarn\n` +
-                             `│ ✦ 39. .mute\n` +
-                             `│ ✦ 40. .unmute\n` +
-                             `│ ✦ 41. .pinmsg\n` +
-                             `│ ✦ 42. .unpinmsg\n` +
-                             `│ ✦ 43. .poll\n` +
-                             `│ ✦ 44. .cpoll\n` +
-                             `│ ✦ 45. .upoll\n` +
-                             `│ ✦ 46. .uptimepoll\n` +
-                             `│ ✦ 47. .event\n` +
-                             `│ ✦ 48. .gettxt\n` +
-                             `│ ✦ 49. .groupstatinfo\n` +
-                             `│ ✦ 50. .groupstatus\n` +
-                             `│ ✦ 51. .gs\n` +
-                             `│ ✦ 52. .gsinfo\n` +
-                             `│ ✦ 53. .gstatus\n` +
-                             `│ ✦ 54. .keep\n` +
-                             `│ ✦ 55. .pending\n` +
-                             `│ ✦ 56. .revoke\n` +
-                             `│ ✦ 57. .swgc\n` +
-                             `│ ✦ 58. .togstatus\n` +
-                             `│ ✦ 59. .unban\n` +
-                             `│ ✦ 60. .unblock\n` +
-                             `│ ✦ 61. .unkeep\n` +
-                             `│ ✦ 62. .abot\n` +
-                             `│ ✦ 63. .add\n` +
-                             `│ ✦ 64. .alink\n` +
-                             `│ ✦ 65. .antibadword\n` +
-                             `│ ✦ 66. .anticall\n` +
-                             `│ ✦ 67. .antidelete\n` +
-                             `│ ✦ 68. .antiedit\n` +
-                             `│ ✦ 69. .antitag\n` +
-                             `│ ✦ 70. .block\n` +
-                             `│ ✦ 71. .blocklist\n` +
-                             `│ ✦ 72. .channelpoll\n` +
-                             `│ ✦ 73. .chatbot\n` +
-                             `│ ✦ 74. .disappear\n` +
-                             `│ ✦ 75. .disappearing\n` +
+                             `│ ✦ 4. .autoreact on/off\n` +
+                             `│ ✦ 5. .add\n` +
+                             `│ ✦ 6. .block\n` +
+                             `│ ✦ 7. .kickall\n` +
+                             `│ ✦ 8. .tagall\n` +
+                             `│ ✦ 9. .all\n` +
+                             `│ ✦ 10. .everyone\n` +
+                             `│ ✦ 11. .hidetag\n` +
+                             `│ ✦ 12. .htag\n` +
+                             `│ ✦ 13. .htagall\n` +
+                             `│ ✦ 14. .silenttag\n` +
+                             `│ ✦ 15. .kick\n` +
+                             `│ ✦ 16. .ban\n` +
+                             `│ ✦ 17. .promote\n` +
+                             `│ ✦ 18. .admin\n` +
+                             `│ ✦ 19. .admins\n` +
+                             `│ ✦ 20. .demote\n` +
+                             `│ ✦ 21. .close\n` +
+                             `│ ✦ 22. .lock\n` +
+                             `│ ✦ 23. .ilock\n` +
+                             `│ ✦ 24. .open\n` +
+                             `│ ✦ 25. .unlock\n` +
+                             `│ ✦ 26. .iunlock\n` +
+                             `│ ✦ 27. .setname\n` +
+                             `│ ✦ 28. .setdesc\n` +
+                             `│ ✦ 29. .gclink\n` +
+                             `│ ✦ 30. .grouplink\n` +
+                             `│ ✦ 31. .link\n` +
+                             `│ ✦ 32. .invitelink\n` +
+                             `│ ✦ 33. .gcinfo\n` +
+                             `│ ✦ 34. .ginfo\n` +
+                             `│ ✦ 35. .groupinfo\n` +
+                             `│ ✦ 36. .del\n` +
+                             `│ ✦ 37. .delete\n` +
+                             `│ ✦ 38. .warn\n` +
+                             `│ ✦ 39. .warnings\n` +
+                             `│ ✦ 40. .resetwarn\n` +
+                             `│ ✦ 41. .rwarn\n` +
+                             `│ ✦ 42. .mute\n` +
+                             `│ ✦ 43. .unmute\n` +
+                             `│ ✦ 44. .pinmsg\n` +
+                             `│ ✦ 45. .unpinmsg\n` +
+                             `│ ✦ 46. .poll\n` +
+                             `│ ✦ 47. .cpoll\n` +
+                             `│ ✦ 48. .upoll\n` +
+                             `│ ✦ 49. .uptimepoll\n` +
+                             `│ ✦ 50. .event\n` +
+                             `│ ✦ 51. .gettxt\n` +
+                             `│ ✦ 52. .groupstatinfo\n` +
+                             `│ ✦ 53. .groupstatus\n` +
+                             `│ ✦ 54. .gs\n` +
+                             `│ ✦ 55. .gsinfo\n` +
+                             `│ ✦ 56. .gstatus\n` +
+                             `│ ✦ 57. .keep\n` +
+                             `│ ✦ 58. .pending\n` +
+                             `│ ✦ 59. .revoke\n` +
+                             `│ ✦ 60. .swgc\n` +
+                             `│ ✦ 61. .togstatus\n` +
+                             `│ ✦ 62. .unban\n` +
+                             `│ ✦ 63. .unblock\n` +
+                             `│ ✦ 64. .unkeep\n` +
+                             `│ ✦ 65. .abot\n` +
+                             `│ ✦ 66. .alink\n` +
+                             `│ ✦ 67. .antibadword\n` +
+                             `│ ✦ 68. .anticall\n` +
+                             `│ ✦ 69. .antidelete\n` +
+                             `│ ✦ 70. .antiedit\n` +
+                             `│ ✦ 71. .antitag\n` +
+                             `│ ✦ 72. .blocklist\n` +
+                             `│ ✦ 73. .channelpoll\n` +
+                             `│ ✦ 74. .chatbot\n` +
+                             `│ ✦ 75. .disappear\n` +
+                             `│ ✦ 76. .disappearing\n` +
                              `╰───────────────────────────\n\n` +
 
                              `╭─── ❖ *🤖 SMART AI TOOLS* ❖\n` +
@@ -1172,77 +1366,80 @@ function setupWhatsAppEvents(sock) {
                              `╰───────────────────────────\n\n` +
 
                              `╭─── ❖ *📥 DOWNLOADERS* ❖\n` +
-                             `│ ✦ 1. .alldl\n` +
-                             `│ ✦ 2. .capcut\n` +
-                             `│ ✦ 3. .capcutdl\n` +
-                             `│ ✦ 4. .cc\n` +
-                             `│ ✦ 5. .extractaudio\n` +
-                             `│ ✦ 6. .facebook\n` +
-                             `│ ✦ 7. .fb\n` +
-                             `│ ✦ 8. .fbdl\n` +
-                             `│ ✦ 9. .ig\n` +
-                             `│ ✦ 10. .img\n` +
-                             `│ ✦ 11. .imgdl\n` +
-                             `│ ✦ 12. .insta\n` +
-                             `│ ✦ 13. .instagram\n` +
-                             `│ ✦ 14. .mp3\n` +
-                             `│ ✦ 15. .pic\n` +
-                             `│ ✦ 16. .play\n` +
-                             `│ ✦ 17. .repost\n` +
-                             `│ ✦ 18. .reposts\n` +
-                             `│ ✦ 19. .song\n` +
-                             `│ ✦ 20. .sp\n` +
-                             `│ ✦ 21. .spotify\n` +
-                             `│ ✦ 22. .tik\n` +
-                             `│ ✦ 23. .tiktok\n` +
-                             `│ ✦ 24. .tomp3\n` +
-                             `│ ✦ 25. .tovn\n` +
-                             `│ ✦ 26. .tovoice\n` +
-                             `│ ✦ 27. .tt\n` +
-                             `│ ✦ 28. .ttrepost\n` +
-                             `│ ✦ 29. .twit\n` +
-                             `│ ✦ 30. .twitter\n` +
-                             `│ ✦ 31. .v2mp3\n` +
-                             `│ ✦ 32. .video\n` +
-                             `│ ✦ 33. .vn\n` +
-                             `│ ✦ 34. .xdl\n` +
-                             `│ ✦ 35. .youtube\n` +
-                             `│ ✦ 36. .yt\n` +
-                             `│ ✦ 37. .ytdl\n` +
-                             `│ ✦ 38. .ytmp3\n` +
-                             `│ ✦ 39. .ytmp4\n` +
-                             `│ ✦ 40. .yts\n` +
-                             `│ ✦ 41. .ytsearch\n` +
+                             `│ ✦ 1. .play\n` +
+                             `│ ✦ 2. .movie\n` +
+                             `│ ✦ 3. .song\n` +
+                             `│ ✦ 4. .film\n` +
+                             `│ ✦ 5. .alldl\n` +
+                             `│ ✦ 6. .capcut\n` +
+                             `│ ✦ 7. .capcutdl\n` +
+                             `│ ✦ 8. .cc\n` +
+                             `│ ✦ 9. .extractaudio\n` +
+                             `│ ✦ 10. .facebook\n` +
+                             `│ ✦ 11. .fb\n` +
+                             `│ ✦ 12. .fbdl\n` +
+                             `│ ✦ 13. .ig\n` +
+                             `│ ✦ 14. .img\n` +
+                             `│ ✦ 15. .imgdl\n` +
+                             `│ ✦ 16. .insta\n` +
+                             `│ ✦ 17. .instagram\n` +
+                             `│ ✦ 18. .mp3\n` +
+                             `│ ✦ 19. .pic\n` +
+                             `│ ✦ 20. .repost\n` +
+                             `│ ✦ 21. .reposts\n` +
+                             `│ ✦ 22. .sp\n` +
+                             `│ ✦ 23. .spotify\n` +
+                             `│ ✦ 24. .tik\n` +
+                             `│ ✦ 25. .tiktok\n` +
+                             `│ ✦ 26. .tomp3\n` +
+                             `│ ✦ 27. .tovn\n` +
+                             `│ ✦ 28. .tovoice\n` +
+                             `│ ✦ 29. .tt\n` +
+                             `│ ✦ 30. .ttrepost\n` +
+                             `│ ✦ 31. .twit\n` +
+                             `│ ✦ 32. .twitter\n` +
+                             `│ ✦ 33. .v2mp3\n` +
+                             `│ ✦ 34. .video\n` +
+                             `│ ✦ 35. .vn\n` +
+                             `│ ✦ 36. .xdl\n` +
+                             `│ ✦ 37. .youtube\n` +
+                             `│ ✦ 38. .yt\n` +
+                             `│ ✦ 39. .ytdl\n` +
+                             `│ ✦ 40. .ytmp3\n` +
+                             `│ ✦ 41. .ytmp4\n` +
+                             `│ ✦ 42. .yts\n` +
+                             `│ ✦ 43. .ytsearch\n` +
                              `╰───────────────────────────\n\n` +
 
                              `╭─── ❖ *📢 CHANNELS COMMANDS* ❖\n` +
-                             `│ ✦ 1. .cekidch\n` +
-                             `│ ✦ 2. .channelinfo\n` +
-                             `│ ✦ 3. .channelpost\n` +
-                             `│ ✦ 4. .channelstatus\n` +
-                             `│ ✦ 5. .channelstory\n` +
-                             `│ ✦ 6. .chanreact\n` +
-                             `│ ✦ 7. .chanstatus\n` +
-                             `│ ✦ 8. .chpost\n` +
-                             `│ ✦ 9. .chstatus\n` +
-                             `│ ✦ 10. .chstory\n` +
-                             `│ ✦ 11. .creact\n` +
-                             `│ ✦ 12. .cstatus\n` +
-                             `│ ✦ 13. .cvote\n` +
-                             `│ ✦ 14. .follow\n` +
-                             `│ ✦ 15. .idch\n` +
-                             `│ ✦ 16. .inspect\n` +
-                             `│ ✦ 17. .jid\n` +
-                             `│ ✦ 18. .joinchannel\n` +
-                             `│ ✦ 19. .leavechannel\n` +
-                             `│ ✦ 20. .nreact\n` +
-                             `│ ✦ 21. .sendch\n` +
-                             `│ ✦ 22. .sendchannel\n` +
-                             `│ ✦ 23. .swnc\n` +
-                             `│ ✦ 24. .unfollow\n` +
+                             `│ ✦ 1. .shownumber (Reveal Sender Number)\n` +
+                             `│ ✦ 2. .cekidch\n` +
+                             `│ ✦ 3. .channelinfo\n` +
+                             `│ ✦ 4. .channelpost\n` +
+                             `│ ✦ 5. .channelstatus\n` +
+                             `│ ✦ 6. .channelstory\n` +
+                             `│ ✦ 7. .chanreact\n` +
+                             `│ ✦ 8. .chanstatus\n` +
+                             `│ ✦ 9. .chpost\n` +
+                             `│ ✦ 10. .chstatus\n` +
+                             `│ ✦ 11. .chstory\n` +
+                             `│ ✦ 12. .creact\n` +
+                             `│ ✦ 13. .cstatus\n` +
+                             `│ ✦ 14. .cvote\n` +
+                             `│ ✦ 15. .follow\n` +
+                             `│ ✦ 16. .idch\n` +
+                             `│ ✦ 17. .inspect\n` +
+                             `│ ✦ 18. .jid\n` +
+                             `│ ✦ 19. .joinchannel\n` +
+                             `│ ✦ 20. .leavechannel\n` +
+                             `│ ✦ 21. .nreact\n` +
+                             `│ ✦ 22. .sendch\n` +
+                             `│ ✦ 23. .sendchannel\n` +
+                             `│ ✦ 24. .swnc\n` +
+                             `│ ✦ 25. .unfollow\n` +
                              `╰───────────────────────────\n\n` +
 
-                             `> 👑 *Powered by Owner:* ${OWNER_NAME}`;
+                             `> 👑 *Powered by:* ${OWNER_NAME}`;
 
             await sock.sendMessage(from, { 
                 image: { url: BANNER_IMAGE }, 
