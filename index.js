@@ -32,7 +32,7 @@ const BOT_NAME = "NAWAB ZADA HACKER MD BOT";
 const BANNER_IMAGE = "https://i.ibb.co/ycxV3SCM/photo.jpg";
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
-    { name: "Channel 2", url: "https://whatsapp.com/channel/0029Vb8rZ5H9Bb62fjLv430d" },
+    { name: "Channel 2", url: "https://whatsapp.com/channel/0029VaUjhPYIt5rvVy9fpg3R" },
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
