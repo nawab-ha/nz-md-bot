@@ -253,7 +253,7 @@ function setupWhatsAppEvents(sock) {
             for (let num of anu.participants) {
                 if (anu.action === 'add') {
                     await sock.sendMessage(anu.id, {
-                        text: `👑 *Welcome @${num.split('@')[0]} to ${meta.subject}* 🦅\nRules follow karna aur bot enjoy karein!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
+                        text: `👑 *Welcome @${num.split('@')[0]} to ${meta.subject}* 🦅\nGRoup ruls follow krna werna owner ura dy ga!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
                         mentions: [num]
                     });
                 }
