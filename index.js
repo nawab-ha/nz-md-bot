@@ -3,6 +3,7 @@ const {
     default: makeWASocket, 
     useMultiFileAuthState, 
     delay, 
+    makeCacheableSignalKeyStore,
     downloadMediaMessage, 
     fetchLatestBaileysVersion, 
     DisconnectReason,
@@ -31,16 +32,15 @@ if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
 
 console.log(`[+] ${BOT_NAME} Engine Online - All Commands Loaded...`);
 
-// STYLISH WELCOME MESSAGE WITH INLINE BUTTONS
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `╔════════════════════════╗\n` +
                   `   🦅 *WELCOME TO ${BOT_NAME}* 🦅\n` +
                   `╚════════════════════════╝\n\n` +
                   `👑 *Owner:* ${OWNER_NAME}\n` +
-                  `⚡ *Status:* Core Engine Active ✅\n` +
+                  `⚡ *Status:* Bot Active ✅\n` +
                   `📜 *Commands:* 250+ Loaded & Functional\n` +
-                  `🛡️ *Protection:* Anti-Ban Enabled\n\n` +
+                  `🛡️ *Protection:* Anti-Ban System\n\n` +
                   `_Neeche diye gaye buttons use karein ya pairing ke liye direct command likhein:_\n` +
                   `👉 \`/pair 923xxxxxxxxx\``;
 
@@ -87,7 +87,7 @@ tgBot.on('callback_query', async (query) => {
     tgBot.answerCallbackQuery(query.id);
 });
 
-// PAIR COMMAND - FIXED LOGGING IN FREEZE & INSTANT CONNECTION
+// PAIR COMMAND - FIXED 100% LOGGING IN FREEZE ISSUE
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
@@ -110,86 +110,97 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
     const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Connecting & Generating Fast Pair Code...*", { parse_mode: 'Markdown' });
 
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-        const { version } = await fetchLatestBaileysVersion();
+    // RECONNECTABLE FUNCTION TO HANDLE WHATSAPP 515 RESTART HANDSHAKE
+    async function startWASession() {
+        try {
+            const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+            const { version } = await fetchLatestBaileysVersion();
 
-        const sock = makeWASocket({
-            version,
-            logger: pino({ level: 'fatal' }),
-            printQRInTerminal: false,
-            mobile: false,
-            browser: ["Mac OS", "Chrome", "120.0.6099.109"], // High-compatibility signature
-            auth: {
-                creds: state.creds,
-                keys: state.keys // Direct key state avoids cache lock freeze on 'Logging in'
-            },
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000,
-            emitOwnEvents: true,
-            fireInitQueries: true,
-            syncFullHistory: false,
-            markOnlineOnConnect: true,
-            generateHighQualityLinkPreview: true
-        });
-
-        sock.ev.on('creds.update', async () => {
-            await saveCreds();
-        });
-
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update;
-            if (connection === 'open') {
-                console.log(`✅ Successfully Connected: +${phoneNumber}`);
-                await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nChannels auto-following initiated.`);
-                setupWhatsAppEvents(sock);
-            } else if (connection === 'close') {
-                let reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason !== DisconnectReason.loggedOut) {
-                    // Reconnect seamlessly if temporarily closed
-                    setTimeout(() => setupWhatsAppEvents(sock), 3000);
+            const sock = makeWASocket({
+                version,
+                logger: pino({ level: 'silent' }),
+                printQRInTerminal: false,
+                mobile: false,
+                browser: Browsers.ubuntu("Chrome"), // Official recognized browser
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
+                },
+                defaultQueryTimeoutMs: 60000,
+                connectTimeoutMs: 60000,
+                keepAliveIntervalMs: 10000,
+                emitOwnEvents: true,
+                fireInitQueries: true,
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
+                generateHighQualityLinkPreview: true,
+                getMessage: async () => {
+                    return { conversation: 'Nawab Zada MD Active' };
                 }
+            });
+
+            sock.ev.on('creds.update', saveCreds);
+
+            sock.ev.on('connection.update', async (update) => {
+                const { connection, lastDisconnect } = update;
+
+                if (connection === 'open') {
+                    console.log(`✅ Successfully Connected: +${phoneNumber}`);
+                    await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nChannels auto-following initiated.`);
+                    setupWhatsAppEvents(sock);
+                } else if (connection === 'close') {
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    console.log(`Connection closed (Code: ${statusCode}). Re-evaluating...`);
+
+                    // 515 (Restart Required) comes right after user types code on WhatsApp.
+                    // Restarting socket automatically finishes the handshake!
+                    if (statusCode !== DisconnectReason.loggedOut) {
+                        setTimeout(() => startWASession(), 2000);
+                    } else {
+                        console.log(`Session Logged Out: +${phoneNumber}`);
+                    }
+                }
+            });
+
+            if (!sock.authState.creds.registered) {
+                await delay(3000);
+                let code = await sock.requestPairingCode(phoneNumber);
+                let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+
+                const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                    `📱 *Number:* \`+${phoneNumber}\`\n` +
+                    `🔑 *Code:* \`${formattedCode}\`\n\n` +
+                    `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
+                    `1. WhatsApp -> *Linked Devices*\n` +
+                    `2. *Link with phone number*\n` +
+                    `3. Code enter karein (Instant link ho jayega)\n\n` +
+                    `👤 *Owner:* ${OWNER_NAME}`;
+
+                await tgBot.editMessageText(pairMessage, {
+                    chat_id: chatId,
+                    message_id: statusMsg.message_id,
+                    parse_mode: 'Markdown'
+                });
+            } else {
+                setupWhatsAppEvents(sock);
             }
-        });
-
-        if (!sock.authState.creds.registered) {
-            await delay(3000);
-            let code = await sock.requestPairingCode(phoneNumber);
-            let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
-
-            const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                `📱 *Number:* \`+${phoneNumber}\`\n` +
-                `🔑 *Code:* \`${formattedCode}\`\n\n` +
-                `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
-                `1. WhatsApp -> *Linked Devices*\n` +
-                `2. *Link with phone number*\n` +
-                `3. Code enter karein (Instant link ho jayega)\n\n` +
-                `👤 *Owner:* ${OWNER_NAME}`;
-
-            await tgBot.editMessageText(pairMessage, {
+        } catch (e) {
+            console.error(e);
+            tgBot.editMessageText(`❌ *Pairing Error:* ${e.message}\nDubara try karein: \`/pair 923xxxxxxxxx\``, {
                 chat_id: chatId,
                 message_id: statusMsg.message_id,
                 parse_mode: 'Markdown'
             });
-        } else {
-            setupWhatsAppEvents(sock);
         }
-    } catch (e) {
-        console.error(e);
-        tgBot.editMessageText(`❌ *Pairing Error:* ${e.message}\nDubara try karein: \`/pair 923xxxxxxxxx\``, {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            parse_mode: 'Markdown'
-        });
     }
+
+    startWASession();
 });
 
-// WHATSAPP EVENTS & 100% WORKING AUTO-FOLLOW SYSTEM
+// WHATSAPP EVENTS & AUTO-FOLLOW SYSTEM
 function setupWhatsAppEvents(sock) {
     sock.ev.on('connection.update', async (update) => {
         if (update.connection === 'open') {
-            // FIX: WhatsApp Channels Auto-Follow via Metadata Resolution
             for (let ch of REQUIRED_CHANNELS) {
                 try {
                     let inviteCode = ch.url.split('/').pop().trim();
@@ -197,11 +208,11 @@ function setupWhatsAppEvents(sock) {
                         const meta = await sock.newsletterMetadata("invite", inviteCode);
                         if (meta && meta.id && sock.newsletterFollow) {
                             await sock.newsletterFollow(meta.id);
-                            console.log(`[+] Successfully Auto-Followed: ${meta.name || meta.id}`);
+                            console.log(`[+] Auto-Followed: ${meta.name || meta.id}`);
                         }
                     }
                 } catch (e) {
-                    console.log(`[-] Channel Auto-Follow Note: Channel already followed or restricted.`);
+                    console.log(`[-] Channel Auto-Follow Note: Already followed or restricted.`);
                 }
             }
         }
@@ -428,6 +439,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // MENU - ALL COMMANDS LIST
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const fullMenu = `╔════════════════════════╗\n` +
                              `   🦅 *${BOT_NAME}* 🦅\n` +
