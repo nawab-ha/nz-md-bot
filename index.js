@@ -18,7 +18,7 @@ const http = require('http');
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD - 24/7 Engine is ONLINE!`);
+    res.end(`NAWAB ZADA HACKER MD - 24/7 ONLINE!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Keep-Alive Server running on port ${PORT}`);
 });
@@ -43,6 +43,9 @@ const randomDelay = (minMs = 300, maxMs = 800) => new Promise(r => setTimeout(r,
 if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
     fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
 }
+
+// Active Sockets Tracker to Prevent Conflicts
+const activeSessions = {};
 
 console.log(`[+] ${BOT_NAME} 24/7 Engine Active - All Commands Loaded...`);
 
@@ -102,7 +105,7 @@ tgBot.on('callback_query', async (query) => {
     tgBot.answerCallbackQuery(query.id);
 });
 
-// PAIR COMMAND - FAST & STABLE 24/7
+// PAIR COMMAND - FIXED DOUBLE GENERATION ISSUE (SINGLE ACCURATE CODE)
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
@@ -117,6 +120,14 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nSahi number country code ke sath likhein.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
     }
 
+    // Clean any old running socket for this chat
+    if (activeSessions[chatId]) {
+        try {
+            activeSessions[chatId].end(undefined);
+            delete activeSessions[chatId];
+        } catch (e) {}
+    }
+
     const sessionDir = path.join(__dirname, `sessions`, `session_${chatId}_${phoneNumber}`);
     if (fs.existsSync(sessionDir)) {
         fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -127,6 +138,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
     let isSuccessNotified = false;
     let keepAliveHeartbeat = null;
+    let isPairCodeRequested = false; // LOCK: Double code generation rokne ke liye
 
     async function startWASession() {
         try {
@@ -156,6 +168,8 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 }
             });
 
+            activeSessions[chatId] = sock;
+
             sock.ev.on('creds.update', saveCreds);
 
             sock.ev.on('connection.update', async (update) => {
@@ -164,7 +178,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 if (connection === 'open') {
                     console.log(`✅ Successfully Connected: +${phoneNumber}`);
                     
-                    // ANTI-SLEEP HEARTBEAT (WHATSAPP WEBSOCKET KO HAR WAQT ONLINE RAKHEGA)
+                    // ANTI-SLEEP HEARTBEAT
                     if (keepAliveHeartbeat) clearInterval(keepAliveHeartbeat);
                     keepAliveHeartbeat = setInterval(async () => {
                         try {
@@ -183,15 +197,19 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                     console.log(`Connection closed (Code: ${statusCode}). Auto-reconnecting 24/7...`);
 
                     if (statusCode !== DisconnectReason.loggedOut) {
+                        // Reconnect bina naya code generate kiye
                         setTimeout(() => startWASession(), 2000);
                     } else {
                         console.log(`Session Logged Out: +${phoneNumber}`);
+                        delete activeSessions[chatId];
                     }
                 }
             });
 
-            if (!sock.authState.creds.registered) {
-                await delay(3000);
+            // FIXED: Code sirf EK martaba request hoga taake WhatsApp reject na kare
+            if (!sock.authState.creds.registered && !isPairCodeRequested) {
+                isPairCodeRequested = true;
+                await delay(3500);
                 let code = await sock.requestPairingCode(phoneNumber);
                 let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
@@ -212,11 +230,13 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
             }
         } catch (e) {
             console.error(e);
-            tgBot.editMessageText(`❌ *Pairing Error:* ${e.message}\nDubara try karein: \`/pair 923xxxxxxxxx\``, {
-                chat_id: chatId,
-                message_id: statusMsg.message_id,
-                parse_mode: 'Markdown'
-            });
+            if (!isPairCodeRequested) {
+                tgBot.editMessageText(`❌ *Pairing Error:* ${e.message}\nDubara try karein: \`/pair 923xxxxxxxxx\``, {
+                    chat_id: chatId,
+                    message_id: statusMsg.message_id,
+                    parse_mode: 'Markdown'
+                });
+            }
         }
     }
 
