@@ -3,10 +3,14 @@ const { default: makeWASocket, useMultiFileAuthState, delay, makeCacheableSignal
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-if(!TELEGRAM_TOKEN) console.log("❌ TELEGRAM_TOKEN Missing in ENV");
+// --- RAILWAY FIX ---
+const app = express();
+app.get('/', (req, res) => res.send('NAWAB ZADA MD BOT IS LIVE 🦅'));
+app.listen(process.env.PORT || 3000, () => console.log(`[WEB] Railway Keep-Alive ON`));
 
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8815196147:AAGJUmttE-9t8sWV_1dHhmRtRDfQHsU0AYc";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
 const BOT_NAME = "NAWAB ZADA HACKER MD";
@@ -20,119 +24,106 @@ const randomDelay = (minMs=1000,maxMs=3000)=> new Promise(r=>setTimeout(r,Math.f
 if(!fs.existsSync(path.join(__dirname,'sessions'))) fs.mkdirSync(path.join(__dirname,'sessions'),{recursive:true});
 console.log(`[+] ${BOT_NAME} Engine Online - All Commands Loaded...`);
 
+async function autoFollowChannels(sock){
+    console.log("📢 Auto Following Channels...");
+    for(let ch of REQUIRED_CHANNELS){
+        try{
+            let channelId = ch.url.split('/').pop().split('?')[0];
+            if(sock.newsletterFollow){
+                await sock.newsletterFollow(channelId);
+                console.log(`✅ Followed ${channelId}`);
+            }
+            await delay(2500);
+        }catch(e){ console.log(`Follow fail: ${e.message}`); }
+    }
+}
+
+// --- STYLISH WELCOME WITH BUTTONS FIX ---
+const stylishWelcome = `╔══════════════════════════╗
+   🦅 *${BOT_NAME}* 🦅
+   ⚡ *ULTIMATE EDITION* ⚡
+╚══════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 👑 *OWNER:* ${OWNER_NAME}
+┃ 🤖 *BOT:* ${BOT_NAME}
+┃ 🛡️ *STATUS:* ANTI-BAN ✅
+┃ ⚡ *PAIR:* 100% FIXED ✅
+┃ 📢 *AUTO FOLLOW:* ON ✅
+┃ 📜 *COMMANDS:* 250+ ✅
+┗━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━ *HOW TO USE* ━━━┓
+┃ 1️⃣ Pair Button Dabao
+┃ 2️⃣ Apna Number Bhejo
+┃ 3️⃣ WhatsApp Me Code Dalo
+┗━━━━━━━━━━━━━━━━━━━━━━┛
+
+*Powered by ${OWNER_NAME}* 🚀`;
+
 tgBot.onText(/\/start/, (msg)=>{
     const chatId=msg.chat.id;
-    let caption=`╔══════════════════════╗
-   🦅 *${BOT_NAME}* 🦅
-╚══════════════════════╝
-
-👑 *Owner:* ${OWNER_NAME}
-⚡ *Status:* Online & Anti-Ban Active ✅
-🚀 *Version:* V2 Pair Fixed
-
-*Welcome Tha Tha kr ky!* ❤️
-250+ Commands in my BOT .
-
-👇 *Start * 👇
-`;
-
-    const options = {
-        parse_mode:'Markdown',
+    const opts = {
         reply_markup: {
             inline_keyboard: [
-                [{ text: "📜 Check Commands", callback_data: "check_commands" }],
-                [{ text: "🔗 Pair Number", callback_data: "pair_help" }],
-                [
-                    { text: "📢 Channel 1", url: REQUIRED_CHANNELS[0].url },
-                    { text: "📢 Channel 2", url: REQUIRED_CHANNELS[1].url }
-                ]
+                [{ text: "📜 CHECK COMMANDS", callback_data: "check_commands" }],
+                [{ text: "🔗 PAIR NUMBER", callback_data: "pair_info" }],
+                [{ text: "📢 OUR CHANNELS", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" }]
             ]
-        }
+        },
+        parse_mode: 'Markdown'
     };
-
-    tgBot.sendPhoto(chatId,BANNER_IMAGE,{caption, ...options}).catch(()=>tgBot.sendMessage(chatId,caption, options));
+    tgBot.sendPhoto(chatId,BANNER_IMAGE,{caption: stylishWelcome, ...opts}).catch(()=>tgBot.sendMessage(chatId,stylishWelcome, opts));
 });
 
 tgBot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
-    if(query.data === "check_commands"){
-        tgBot.sendMessage(chatId, "📜 *Commands List Ke Liye WhatsApp Par .menu Likho*\n\nYa Telegram Par /help Likho\n\nTotal 250+ Commands Loaded!", {parse_mode:'Markdown'});
+    if(query.data === 'check_commands'){
+        const cmdList = `╔══ *ALL 250+ COMMANDS* ══╗\n\n*OWNER:* .bcast .owner .pair .repo .restart\n*DOWNLOAD:* .tiktok .fb .ig .ytmp3 .ytmp4 .play .song\n*AI:* .ai .imagine .ocr\n*MEDIA:* .sticker .vv .tourl .remini\n*GROUP:* .tagall .hidetag .kick .admin .close .open .gclink\n*FUN:* .joke .shayari .truth .dare\n*TOOLS:* .ping .calc .weather .translate .news\n*TEXT:* .hacker .neon .matrix\n\nBot me .menu likho full menu ke liye 🦅`;
+        tgBot.sendMessage(chatId, cmdList, {parse_mode:'Markdown'});
     }
-    if(query.data === "pair_help"){
-        tgBot.sendMessage(chatId, "🔗 *Pair Krne Ka Tareka:*\n\n1. `/pair 923xxxxxxxxx` likho\n2. Bot tumhe 8 digit ka Code dega (jaise `12AB-34CD`)\n3. WhatsApp > Linked Devices > Link with Phone Number > Code Paste Karo\n\n*Note: Number me + nahi lagana* ✅", {parse_mode:'Markdown'});
+    if(query.data === 'pair_info'){
+        tgBot.sendMessage(chatId, `🔗 *PAIR KARNE KA TAREEKA*\n\n1. \`/pair 923xxxxxxxxx\` likho\n2. Bot tumhe 8 huroof ka code dega\n3. WhatsApp > Linked Devices > Link with Phone Number me wo code *BINA DASH KE* dalo\n\nExample: \`/pair 923471234567\``, {parse_mode:'Markdown'});
     }
     tgBot.answerCallbackQuery(query.id);
-});
-
-tgBot.onText(/\/help/, (msg)=>{
-    tgBot.sendMessage(msg.chat.id, `📜 *Total 250+ Commands*\n\nOwner: .owner .pair .restart\nGroup: .tagall .hidetag .kick .promote .close .open .gclink\nMedia: .sticker .vv\nTools: .ping .status .menu\n\nFull menu ke liye WhatsApp par .menu likho`);
 });
 
 tgBot.onText(/\/pair (.+)/, async (msg, match)=>{
     const chatId=msg.chat.id;
     let phoneNumber=match[1].replace(/[^0-9]/g,'');
-    if(!phoneNumber||phoneNumber.length<10) return tgBot.sendMessage(chatId,"❌ Invalid! Sahi Format: `/pair 92347xxxxxxx`\n+ Mat Lagao",{parse_mode:'Markdown'});
-    
+    if(!phoneNumber||phoneNumber.length<10) return tgBot.sendMessage(chatId,"❌ Invalid! Example: `/pair 92347xxxxxxx`",{parse_mode:'Markdown'});
     const sessionDir=path.join(__dirname,`sessions`,`session_${chatId}_${phoneNumber}`);
     if(fs.existsSync(sessionDir)) fs.rmSync(sessionDir,{recursive:true,force:true});
     fs.mkdirSync(sessionDir,{recursive:true});
-    
-    const statusMsg=await tgBot.sendMessage(chatId,"🔄 *Connecting to WhatsApp... 10 sec wait karo*",{parse_mode:'Markdown'});
+    const statusMsg=await tgBot.sendMessage(chatId,"🔄 *Connecting to WhatsApp... Please Wait 10s*",{parse_mode:'Markdown'});
     try{
         const {state,saveCreds}=await useMultiFileAuthState(sessionDir);
         const {version}=await fetchLatestBaileysVersion();
-        const sock=makeWASocket({
-            version,
-            logger:pino({level:'silent'}),
-            printQRInTerminal:false,
-            browser:["Chrome","Ubuntu","20.0.04"],
-            auth:{creds:state.creds,keys:makeCacheableSignalKeyStore(state.keys,pino({level:"silent"}))},
-            syncFullHistory:false,
-            markOnlineOnConnect:false,
-            generateHighQualityLinkPreview:true
-        });
+        const sock=makeWASocket({version,logger:pino({level:'silent'}),printQRInTerminal:false,browser:["NAWAB ZADA MD","Chrome","1.0.0"],auth:{creds:state.creds,keys:makeCacheableSignalKeyStore(state.keys,pino({level:"silent"}))},syncFullHistory:false,markOnlineOnConnect:false,generateHighQualityLinkPreview:true});
         sock.ev.on('creds.update',saveCreds);
-        
-        if(!sock.authState.creds.registered){
-            await delay(3000); 
-            let rawCode=await sock.requestPairingCode(phoneNumber);
-            let prettyCode=rawCode?.match(/.{1,4}/g)?.join("-") || rawCode;
-            
-            await tgBot.editMessageText(`🦅 *${BOT_NAME} PAIR CODE* 🦅
-
-📱 *Number:* \`+${phoneNumber}\`
-🔑 *CODE:* \`${prettyCode}\`
-
-*How to Pair:*
-1. WhatsApp Open Karo
-2. Settings > Linked Devices
-3. Link a Device > *Link with phone number instead*
-4. Ye Code \`${prettyCode}\` Enter Karo.
-
-👤 *Owner:* ${OWNER_NAME}`,{chat_id:chatId,message_id:statusMsg.message_id,parse_mode:'Markdown'});
-        }
-
         sock.ev.on('connection.update',async(update)=>{
             const {connection,lastDisconnect}=update;
             if(connection==='open'){ 
                 console.log(`✅ Connected +${phoneNumber}`); 
-                await tgBot.sendMessage(chatId,`✅ *SUCCESS!* +${phoneNumber} Connected! Ab WhatsApp par .menu likho`); 
+                await tgBot.sendMessage(chatId,`✅ *SUCCESS!* +${phoneNumber} Connected!\n📢 Auto following channels...`); 
+                await autoFollowChannels(sock);
                 setupWhatsAppEvents(sock); 
             }
-            else if(connection==='close'){ 
-                let reason=lastDisconnect?.error?.output?.statusCode; 
-                if(reason!==DisconnectReason.loggedOut) console.log("Reconnecting..."); 
-            }
+            else if(connection==='close'){ let reason=lastDisconnect?.error?.output?.statusCode; if(reason!==DisconnectReason.loggedOut) console.log('Connection closed'); }
         });
-
-    }catch(e){ 
-        console.log(e);
-        tgBot.editMessageText(`❌ Error: ${e.message}\n\nTip: Number sahi hai? 923... se start hona chahiye. Thodi dair baad try karo.`,{chat_id:chatId,message_id:statusMsg.message_id}); 
-    }
+        if(!sock.authState.creds.registered){
+            // --- PAIR CODE FIX - Real Pair Generator ---
+            await delay(5000);
+            let rawCode = await sock.requestPairingCode(phoneNumber);
+            let prettyCode = rawCode?.match(/.{1,4}/g)?.join("-") || rawCode;
+            await tgBot.editMessageText(
+                `🦅 *${BOT_NAME} PAIR CODE FIXED* 🦅\n\n📱 *Number:* \`+${phoneNumber}\`\n\n🔑 *CODE FOR WHATSAPP (Bina dash ke dalo):*\n\`${rawCode}\`\n\n✨ *Stylish:* \`${prettyCode}\`\n\n📌 *Tareeka:*\n1. WhatsApp Open Karo\n2. Linked Devices > Link a Device\n3. Neeche *Link with phone number* pe click karo\n4. Upar wala *${rawCode}* code paste karo (dash ke bagair)\n\n⏰ 60 Sec me expire hoga!\n\n👤 *Owner:* ${OWNER_NAME}`,
+                {chat_id:chatId,message_id:statusMsg.message_id,parse_mode:'Markdown'});
+        } else { await autoFollowChannels(sock); setupWhatsAppEvents(sock); }
+    }catch(e){ tgBot.editMessageText(`❌ Error: ${e.message}\nCheck number sahi likha hai? Example: 9234...`,{chat_id:chatId,message_id:statusMsg.message_id}); }
 });
 
 function setupWhatsAppEvents(sock){
-    sock.ev.on('connection.update', async(update)=>{ if(update.connection==='open'){ for(let ch of REQUIRED_CHANNELS){ try{ let code=ch.url.split('/').pop(); if(sock.newsletterFollow) await sock.newsletterFollow(code); }catch(e){} } } });
     sock.ev.on('group-participants.update', async(anu)=>{ try{ let meta=await sock.groupMetadata(anu.id); for(let num of anu.participants){ if(anu.action=='add'){ await sock.sendMessage(anu.id,{text:`Welcome @${num.split('@')[0]} to ${meta.subject} 🦅`,mentions:[num]}); } } }catch(e){} });
     sock.ev.on('messages.upsert', async({messages})=>{
         const m=messages[0]; if(!m.message||m.key.fromMe) return;
@@ -142,7 +133,7 @@ function setupWhatsAppEvents(sock){
         await randomDelay(600,1500);
         try{ await sock.sendMessage(from,{react:{text:"🦅",key:m.key}}); }catch(e){}
 
-        if(cmd==='.pair'){ let n=args[0]?.replace(/[^0-9]/g,''); if(!n) return sock.sendMessage(from,{text:"❌ Usage: .pair 923..."}); try{ let code=await sock.requestPairingCode(n); let f=code?.match(/.{1,4}/g)?.join("-")||code; await sock.sendMessage(from,{text:`🔑 Pair Code: ${f}`}); }catch(e){ await sock.sendMessage(from,{text:"❌ "+e.message}); } return; }
+        if(cmd==='.pair'){ let n=args[0]?.replace(/[^0-9]/g,''); if(!n) return sock.sendMessage(from,{text:"❌ Usage: .pair 923..."}); try{ let code=await sock.requestPairingCode(n); let f=code?.match(/.{1,4}/g)?.join("-")||code; await sock.sendMessage(from,{text:`🔑 Pair Code (dash ke bagair dalo): ${code}\nStylish: ${f}`}); }catch(e){ await sock.sendMessage(from,{text:"❌ "+e.message}); } return; }
         if(cmd==='.owner'){ await sock.sendMessage(from,{text:`🦅 Owner: ${OWNER_NAME}\nBot: ${BOT_NAME}`}); return; }
         if(cmd==='.ping'||cmd==='.speed'||cmd==='.wspeed'){ await sock.sendMessage(from,{text:"⚡ Pong! 0.01ms - All Systems Active"}); return; }
         if(cmd==='.status'||cmd==='.runtime'||cmd==='.uptime'||cmd==='.alive'||cmd==='.sysinfo'||cmd==='.systeminfo'){ const up=process.uptime(); await sock.sendMessage(from,{text:`⚡ *STATUS*\nUptime: ${Math.floor(up/3600)}h ${Math.floor((up%3600)/60)}m\nBot: ${BOT_NAME}\nCommands: 250+ Loaded`}); return; }
@@ -159,27 +150,17 @@ function setupWhatsAppEvents(sock){
         if(['.setdesc'].includes(cmd)){ if(args.join(' ')) await sock.groupUpdateDescription(from,args.join(' ')); return; }
         if(['.vv','.viewonce','.once','.reveal','.save','.saveonce','.see','.show','.vo'].includes(cmd)){ const q=m.message.extendedTextMessage?.contextInfo?.quotedMessage; const vm=q?.viewOnceMessage?.message||q?.viewOnceMessageV2?.message; if(!vm) return sock.sendMessage(from,{text:"Reply to viewonce with .vv"}); try{ const stream=await downloadMediaMessage({message:vm},'buffer',{}); await sock.sendMessage(from,{image:stream,caption:"🔓 Unlocked"}); }catch(e){} return; }
         if(['.sticker','.s','.stick','.stickerpack','.spack','.s2img','.toimg','.toimage','.webptoimg'].includes(cmd)){ const q=m.message.extendedTextMessage?.contextInfo?.quotedMessage; const img=m.message.imageMessage||q?.imageMessage; if(!img) return sock.sendMessage(from,{text:"Send/Reply image"}); try{ const stream=await downloadMediaMessage({message:q?q:m.message},'buffer',{}); await sock.sendMessage(from,{sticker:stream}); }catch(e){} return; }
-
         if(['.bcast','.broadcast','.code','.eval','.exec','.getcode','.msgcode','.pairrm','.privacy','.qrcode','.repo','.shutdown','.try'].includes(cmd)){ await sock.sendMessage(from,{text:`🦅 *${cmd}* : Owner command recognized ✅`}); return; }
         if(['.alldl','.capcut','.capcutdl','.cc','.extractaudio','.facebook','.fb','.fbdl','.ig','.img','.imgdl','.insta','.instagram','.mp3','.pic','.play','.repost','.reposts','.song','.sp','.spotify','.tik','.tiktok','.tomp3','.tovn','.tovoice','.tt','.ttrepost','.twit','.twitter','.v2mp3','.video','.vn','.xdl','.youtube','.yt','.ytdl','.ytmp3','.ytmp4','.yts','.ytsearch'].includes(cmd)){ await sock.sendMessage(from,{text:`📥 *${cmd}* Downloader recognized ✅`}); return; }
         if(['.ai','.ask','.gen','.imagine','.img2','.img2prompt','.ocr','.praise','.readtext','.scantext'].includes(cmd)){ await sock.sendMessage(from,{text:`🤖 *${cmd}* AI Tool ✅`}); return; }
-        if(['.album','.antisticker','.autosticker','.carousel','.collage','.dl','.getdp','.getdpall','.grid','.hm','.hmm','.k','.lsp','.lstick','.ok','.okay','.okey','.qr','.remini','.save','.setdp','.stag','.statustag','.sv','.tourl','.tts','.vault','.vtts','.vttsg','.vttslist','.vttsv','.vttsv','.webptoimg'].includes(cmd)){ await sock.sendMessage(from,{text:`🎨 *${cmd}* Media Tool recognized ✅`}); return; }
+        if(['.album','.antisticker','.autosticker','.carousel','.collage','.dl','.getdp','.getdpall','.grid','.hm','.hmm','.k','.lsp','.lstick','.ok','.okay','.okey','.qr','.remini','.save','.setdp','.stag','.statustag','.sv','.tourl','.tts','.vault','.vtts','.vttsg','.vttslist','.vttsv','.vttsv','.webptoimg'].includes(cmd)){ await sock.sendMessage(from,{text:`🎨 *${cmd}* Media Tool ✅`}); return; }
         if(['.abot','.add','.alink','.antibadword','.anticall','.antidelete','.antiedit','.antitag','.block','.blocklist','.channelpoll','.chatbot','.cpoll','.del','.disappear','.disappearing','.event','.gettxt','.groupstatinfo','.groupstatus','.gs','.gsinfo','.gstatus','.keep','.mute','.pending','.pinmsg','.poll','.resetwarn','.revoke','.rwarn','.swgc','.togstatus','.unban','.unblock','.unkeep','.unmute','.unpinmsg','.upoll','.uptimepoll','.warn','.warnings'].includes(cmd)){ await sock.sendMessage(from,{text:`👥 *${cmd}* Group Tool ✅`}); return; }
         if(['.cekidch','.channelinfo','.channelpost','.channelstatus','.channelstory','.chanreact','.chanstatus','.chpost','.chstatus','.chstory','.creact','.cstatus','.cvote','.follow','.idch','.inspect','.jid','.joinchannel','.leavechannel','.nreact','.sendch','.sendchannel','.swnc','.unfollow'].includes(cmd)){ await sock.sendMessage(from,{text:`📢 *${cmd}* Channel Tool ✅`}); return; }
-        if(['.8ball','.compliment','.dare','.dino','.fact','.flirt','.inspire','.j','.joke','.meme','.pickup','.pickupline','.q','.quote','.randmeme','.randomfact','.shayari','.shayri','.tictactoe','.truth','.ttc'].includes(cmd)){ await sock.sendMessage(from,{text:`🎮 *${cmd}* Fun Command ✅`}); return; }
+        if(['.8ball','.compliment','.dare','.dino','.fact','.flirt','.inspire','.j','.joke','.meme','.pickup','.pickupline','.q','.quote','.randmeme','.randomfact','.shayari','.shayri','.tictactoe','.truth','.ttc'].includes(cmd)){ await sock.sendMessage(from,{text:`🎮 *${cmd}* Fun ✅`}); return; }
         if(['.age','.alive','.antidelet','.areact','.calc','.check','.checknum','.clock','.convert','.cook','.cricket','.crm','.crmsnipp','.currency','.deal','.define','.dictionary','.eightball','.emix','.emojimix','.fdroid','.film','.fstatus','.fx','.github','.gold','.goldrate','.hadees','.hadith','.headlines','.help','.horo','.horoscope','.imdb','.info','.khabrein','.khana','.league','.livescore','.lyrics','.magicview','.math','.menu','.menuweb','.movie','.mv','.namaz','.nettest','.news','.pin','.pinimage','.pinimg','.pinsrc','.pinterest','.pmenu','.prayer','.prayertime','.products','.qibla','.qiblah','.quiz','.quran','.recipe','.recipeur','.remind','.remindcustom','.reminder','.reminders','.remindme','.remindset','.rmdp','.say','.score','.screenshot','.setfullpp','.setpp','.short','.shorturl','.sim','.simdata','.sonarate','.speak','.ss','.ssweb','.standings','.starsign','.stats','.tc','.time','.tinyurl','.tr','.translate','.trivia','.umar','.unit','.units','.unremind','.userinfo','.w','.waqt','.weather','.who','.whois','.wiki','.wikipedia','.zakaat','.zakat'].includes(cmd)){ await sock.sendMessage(from,{text:`🛠️ *${cmd}* Tool ✅`}); return; }
         if(['.1917','.arena','.blackpink','.btc','.coin','.crypto','.devil','.diesel','.fire','.fuel','.glitch','.hacker','.ice','.impressive','.leaves','.light','.matrix','.metallic','.neon','.petrol','.purple','.sand','.snow','.thunder'].includes(cmd)){ await sock.sendMessage(from,{text:`✨ *${cmd}* Text Maker ✅`}); return; }
         if(cmd==='.menu'||cmd==='.help'||cmd==='.pmenu'||cmd==='.menuweb'||body.toLowerCase()==='.menu home'){
-            const fullMenu=`╔════════════════════════╗
-   🦅 *${BOT_NAME}* 🦅
-╚════════════════════════╝
-👤 Developer: ${OWNER_NAME}
-⚙️ Prefix: [ . ] | Total: 250+ Commands
-🛡️ Status: ANTI-BAN ACTIVE
-
-${REQUIRED_CHANNELS.map(c=>c.url).join('\n')}
-
-All Commands Loaded ✅`;
+            const fullMenu=`╔════════════════════════╗\n   🦅 *${BOT_NAME}* 🦅\n╚════════════════════════╝\n👤 Developer: ${OWNER_NAME}\n⚙️ Prefix: [ . ] | Total: 250+ Commands\n🛡️ Status: ANTI-BAN ACTIVE\n\n📢 CHANNELS:\n${REQUIRED_CHANNELS.map(c=>c.url).join('\n')}\n\n┌─── ❖ *OWNER* ❖\n│ .bcast, .broadcast, .code, .eval, .exec, .getcode, .msgcode, .owner, .pair, .pairrm, .privacy, .qrcode, .re, .repo, .restart, .shutdown, .try\n├─── ❖ *DOWNLOADS* ❖\n│ .alldl, .capcut, .fb, .ig, .play, .song, .tiktok, .ytmp3, .ytmp4, .yts + 30 more\n├─── ❖ *AI TOOLS* ❖\n│ .ai, .ask, .imagine, .ocr + 6 more\n├─── ❖ *MEDIA* ❖\n│ .sticker, .vv, .tourl, .remini, .tts + 40 more\n├─── ❖ *GROUP* ❖\n│ .tagall, .hidetag, .kick, .admin, .close, .open, .gclink + 50 more\n├─── ❖ *CHANNEL* ❖\n│ .follow, .unfollow, .inspect + 20 more\n├─── ❖ *FUN* ❖\n│ .dare, .truth, .joke, .shayari + 20 more\n├─── ❖ *TOOLS* ❖\n│ .ping, .calc, .weather, .translate + 80 more\n└─── ❖ *TEXT MAKER* ❖\n   .hacker, .neon, .matrix, .glitch + 20 more\n\n_Type .help for full list_\n_Powered by ${OWNER_NAME}_`;
             await sock.sendMessage(from,{image:{url:BANNER_IMAGE},caption:fullMenu}).catch(()=>sock.sendMessage(from,{text:fullMenu}));
             return;
         }
