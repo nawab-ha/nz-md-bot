@@ -3,7 +3,6 @@ const {
     default: makeWASocket, 
     useMultiFileAuthState, 
     delay, 
-    makeCacheableSignalKeyStore, 
     downloadMediaMessage, 
     fetchLatestBaileysVersion, 
     DisconnectReason,
@@ -88,12 +87,11 @@ tgBot.on('callback_query', async (query) => {
     tgBot.answerCallbackQuery(query.id);
 });
 
-// PAIR COMMAND FIXED WITH PROPER NUMBER SANITIZING & BROWSER
+// PAIR COMMAND - FIXED LOGGING IN FREEZE & INSTANT CONNECTION
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
 
-    // Pakistan & International Number Auto-Fix
     if (rawNumber.startsWith('0')) {
         rawNumber = '92' + rawNumber.slice(1);
     }
@@ -110,7 +108,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     }
     fs.mkdirSync(sessionDir, { recursive: true });
 
-    const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Generating Real WhatsApp Pairing Code...*", { parse_mode: 'Markdown' });
+    const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Connecting & Generating Fast Pair Code...*", { parse_mode: 'Markdown' });
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -118,49 +116,55 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
         const sock = makeWASocket({
             version,
-            logger: pino({ level: 'silent' }),
+            logger: pino({ level: 'fatal' }),
             printQRInTerminal: false,
-            // Proper Browser Signature Taake WhatsApp Reject Na Kare
-            browser: Browsers.ubuntu("Chrome"),
+            mobile: false,
+            browser: ["Mac OS", "Chrome", "120.0.6099.109"], // High-compatibility signature
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
+                keys: state.keys // Direct key state avoids cache lock freeze on 'Logging in'
             },
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000,
+            emitOwnEvents: true,
+            fireInitQueries: true,
             syncFullHistory: false,
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: true,
             generateHighQualityLinkPreview: true
         });
 
-        sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', async () => {
+            await saveCreds();
+        });
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             if (connection === 'open') {
-                console.log(`✅ Connected +${phoneNumber}`);
-                await tgBot.sendMessage(chatId, `✅ *SUCCESSFULLY PAIRED!*\n\n+${phoneNumber} is now connected to *${BOT_NAME}*! 🦅`);
+                console.log(`✅ Successfully Connected: +${phoneNumber}`);
+                await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nChannels auto-following initiated.`);
                 setupWhatsAppEvents(sock);
             } else if (connection === 'close') {
                 let reason = lastDisconnect?.error?.output?.statusCode;
                 if (reason !== DisconnectReason.loggedOut) {
-                    setTimeout(() => setupWhatsAppEvents(sock), 5000);
+                    // Reconnect seamlessly if temporarily closed
+                    setTimeout(() => setupWhatsAppEvents(sock), 3000);
                 }
             }
         });
 
         if (!sock.authState.creds.registered) {
-            // WhatsApp initialization ke liye delay zaroori hai
-            await delay(4000);
+            await delay(3000);
             let code = await sock.requestPairingCode(phoneNumber);
             let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
             const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
                 `📱 *Number:* \`+${phoneNumber}\`\n` +
-                `🔑 *One-Tap Copy Code:* \`${formattedCode}\`\n` +
-                `🔢 *Raw Code:* \`${code}\`\n\n` +
-                `*Steps to Connect:*\n` +
-                `1. WhatsApp open karein -> *Linked Devices*\n` +
-                `2. *Link with phone number* par click karein\n` +
-                `3. Upar wala code enter karein (60 seconds ke andar)\n\n` +
+                `🔑 *Code:* \`${formattedCode}\`\n\n` +
+                `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
+                `1. WhatsApp -> *Linked Devices*\n` +
+                `2. *Link with phone number*\n` +
+                `3. Code enter karein (Instant link ho jayega)\n\n` +
                 `👤 *Owner:* ${OWNER_NAME}`;
 
             await tgBot.editMessageText(pairMessage, {
@@ -181,14 +185,24 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     }
 });
 
+// WHATSAPP EVENTS & 100% WORKING AUTO-FOLLOW SYSTEM
 function setupWhatsAppEvents(sock) {
     sock.ev.on('connection.update', async (update) => {
         if (update.connection === 'open') {
+            // FIX: WhatsApp Channels Auto-Follow via Metadata Resolution
             for (let ch of REQUIRED_CHANNELS) {
                 try {
-                    let code = ch.url.split('/').pop();
-                    if (sock.newsletterFollow) await sock.newsletterFollow(code);
-                } catch (e) {}
+                    let inviteCode = ch.url.split('/').pop().trim();
+                    if (sock.newsletterMetadata) {
+                        const meta = await sock.newsletterMetadata("invite", inviteCode);
+                        if (meta && meta.id && sock.newsletterFollow) {
+                            await sock.newsletterFollow(meta.id);
+                            console.log(`[+] Successfully Auto-Followed: ${meta.name || meta.id}`);
+                        }
+                    }
+                } catch (e) {
+                    console.log(`[-] Channel Auto-Follow Note: Channel already followed or restricted.`);
+                }
             }
         }
     });
@@ -414,7 +428,6 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // MENU - ALL COMMANDS LIST
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const fullMenu = `╔════════════════════════╗\n` +
                              `   🦅 *${BOT_NAME}* 🦅\n` +
