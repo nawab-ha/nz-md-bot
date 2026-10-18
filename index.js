@@ -166,3 +166,6 @@ function setupWhatsAppEvents(sock){
         }
     });
 }
+
+process.on('uncaughtException', (err)=>{ console.log('Uncaught:', err.message); });
+process.on('unhandledRejection', (err)=>{ console.log('Unhandled:', err?.message); });
