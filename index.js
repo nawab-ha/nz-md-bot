@@ -27,7 +27,7 @@ http.createServer((req, res) => {
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8647185787:AAFdPPj_YK9xmwNZxH2XevSZc1azZ_fkT38";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8647185787:AAFc3M8yD0ikw6bsB0xX_S6Ln7xrUArupgY";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 const OWNER_NAME = "N̰A̰W̰A̰B̰ Z̰A̰D̰A̰ H̰A̰C̰K̰ḚR̰✌̰️̰🦅̰";
 const BOT_NAME = "𝗡𝗔𝗪𝗔𝗕 𝗭𝗔𝗗𝗔 𝗛𝗔𝗖𝗞𝗘𝗥 𝗠𝗗 𝗕𝗢𝗧";
