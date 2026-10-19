@@ -18,7 +18,7 @@ const http = require('http');
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD BOT - 24/7 Multi-Device BOT ONLINE!`);
+    res.end(`▣🅽🅰🆆🅰🅱 🆉🅰🅳🅰 🅷🅰🅲🅺🅴🆁 🅼🅳 🅱🅾🆃▣ - 24/7 Multi-Device BOT ONLINE!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Server running on port ${PORT}`);
 });
