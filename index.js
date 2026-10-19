@@ -14,22 +14,23 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
+// 24/7 ANTI-SLEEP WEB SERVER
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD BOT is ONLINE!`);
+    res.end(`NAWAB ZADA HACKER MD BOT - 24/7 Multi-Device BOT ONLINE!`);
 }).listen(PORT, () => {
-    console.log(`[+] 24/7 Keep-Alive Server running on port ${PORT}`);
+    console.log(`[+] 24/7 Server running on port ${PORT}`);
 });
 
-// CRASH PREVENTION SYSTEM
+// CRASH PREVENTION GUARDS
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8647185787:AAFdPPj_YK9xmwNZxH2XevSZc1azZ_fkT38";
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-const OWNER_NAME = "NAWAB ZADA HACKER ✌️ 🦅";
-const BOT_NAME = "NAWAB ZADA HACKER MD BOT";
+const OWNER_NAME = "✦ 𝓝𝓐𝓦𝓐𝓑 𝓩𝓐𝓓𝓐 𝓗𝓐𝓒𝓚𝓔𝓡 ✌️ 🦅 ✦";
+const BOT_NAME = "▣🅽🅰🆆🅰🅱 🆉🅰🅳🅰 🅷🅰🅲🅺🅴🆁 🅼🅳 🅱🅾🆃▣";
 const BANNER_IMAGE = "https://i.ibb.co/ycxV3SCM/photo.jpg";
 const REQUIRED_CHANNELS = [
     { name: "Channel 1", url: "https://whatsapp.com/channel/0029VbB47ttDDmFNztpnZf2m" },
@@ -41,6 +42,7 @@ if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
     fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
 }
 
+// PERSISTENT STORAGE
 const antilinkFile = path.join(__dirname, 'antilink.json');
 let antilinkDB = {};
 if (fs.existsSync(antilinkFile)) {
@@ -60,10 +62,99 @@ const saveSettings = () => {
 };
 
 const activeSessions = {};
-// MESSAGE DEDUPLICATION CACHE (ROKTA HAI REPEATED MESSAGES KO)
 const processedMsgIds = new Set();
+const botSentMsgIds = new Set();
 
 console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
+
+async function restoreAllSessions() {
+    try {
+        const sessionsDir = path.join(__dirname, 'sessions');
+        const folders = fs.readdirSync(sessionsDir);
+        for (let folder of folders) {
+            const fullPath = path.join(sessionsDir, folder);
+            if (fs.existsSync(path.join(fullPath, 'creds.json'))) {
+                const sessionKey = folder.replace('session_', '');
+                console.log(`[+] Restoring Active Session: ${sessionKey}`);
+                startSocketEngine(fullPath, sessionKey);
+                await delay(2000);
+            }
+        }
+    } catch (e) {}
+}
+setTimeout(restoreAllSessions, 3000);
+
+async function startSocketEngine(sessionDir, sessionKey, onReady) {
+    if (activeSessions[sessionKey]) {
+        try {
+            activeSessions[sessionKey].ws?.close();
+            activeSessions[sessionKey].end(undefined);
+        } catch (e) {}
+        delete activeSessions[sessionKey];
+    }
+
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        const { version } = await fetchLatestBaileysVersion();
+
+        const sock = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: false,
+            mobile: false,
+            browser: Browsers.ubuntu("Chrome"),
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
+            },
+            defaultQueryTimeoutMs: undefined,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
+            emitOwnEvents: true,
+            fireInitQueries: true,
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: true,
+            getMessage: async () => ({ conversation: 'ℕ𝔸𝕎𝔸𝔹 ℤ𝔸𝔻𝔸 ℍ𝔸ℂ𝕂𝔼ℝ🔑' })
+        });
+
+        activeSessions[sessionKey] = sock;
+        sock.ev.on('creds.update', async () => await saveCreds());
+
+        let heartbeatTimer = null;
+
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect } = update;
+
+            if (connection === 'open') {
+                console.log(`✅ Session [${sessionKey}] Connected & Online!`);
+                if (heartbeatTimer) clearInterval(heartbeatTimer);
+                heartbeatTimer = setInterval(async () => {
+                    try { await sock.sendPresenceUpdate('available'); } catch (e) {}
+                }, 20000);
+
+                setupWhatsAppEvents(sock);
+                if (onReady) onReady(sock);
+            } else if (connection === 'close') {
+                if (heartbeatTimer) clearInterval(heartbeatTimer);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Auto-Reconnecting...`);
+
+                if (statusCode !== DisconnectReason.loggedOut) {
+                    setTimeout(() => startSocketEngine(sessionDir, sessionKey, onReady), 2500);
+                } else {
+                    console.log(`Session [${sessionKey}] Logged Out.`);
+                    delete activeSessions[sessionKey];
+                }
+            }
+        });
+
+        return sock;
+    } catch (err) {
+        console.error(`Socket Engine Error [${sessionKey}]:`, err.message);
+        return null;
+    }
+}
 
 // ==================== TELEGRAM BOT MODULE ====================
 tgBot.onText(/\/start/, (msg) => {
@@ -72,10 +163,10 @@ tgBot.onText(/\/start/, (msg) => {
                   `   🦅 *WELCOME TO ${BOT_NAME}* 🦅\n` +
                   `╚════════════════════════╝\n\n` +
                   `👑 *Owner:* ${OWNER_NAME}\n` +
-                  `⚡ *Status:* 24/7  Active ✅\n` +
+                  `⚡ *Status:* 24/7 Multi-Client BOT online ✅\n` +
                   `📜 *Commands:* 250+ Loaded & Functional\n` +
-                  `🛡️ *Protection:* Anti-Ban System\n\n` +
-                  `_Neeche diye gaye buttons use karein ya pairing ke liye direct command likhein:_\n` +
+                  `🛡️ *Protection:* Anti-Ban system\n\n` +
+                  `_Pairing ke liye command enter karein:_\n` +
                   `👉 \`/pair 923xxxxxxxxx\``;
 
     const options = {
@@ -106,8 +197,8 @@ tgBot.on('callback_query', async (query) => {
 
     if (data === 'btn_commands') {
         const cmdSummary = `📋 *${BOT_NAME} - COMMAND PANEL*\n\n` +
-            `🔹 Total 250+ Multi-device Commands Active.\n` +
-            `WhatsApp par jakar *.menu* type karein commands list samne aa jayegi.`;
+            `🔹 Total 250+ Commands Active.\n` +
+            `WhatsApp par jakar *.menu* send karein poori list mil jayegi.`;
         await tgBot.sendMessage(chatId, cmdSummary, { parse_mode: 'Markdown' });
     } else if (data === 'btn_pair_info') {
         await tgBot.sendMessage(chatId, `📌 *Pairing Guide:*\n\nEnter your number with country code:\nExample: \`/pair 923001234567\``, { parse_mode: 'Markdown' });
@@ -115,7 +206,6 @@ tgBot.on('callback_query', async (query) => {
     tgBot.answerCallbackQuery(query.id);
 });
 
-// TELEGRAM PAIRING ENGINE (100% SUCCESSFUL REGISTRATION)
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
@@ -127,14 +217,8 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nEnter valid number with country code.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
     }
 
-    if (activeSessions[chatId]) {
-        try {
-            activeSessions[chatId].end(undefined);
-            delete activeSessions[chatId];
-        } catch (e) {}
-    }
-
-    const sessionDir = path.join(__dirname, `sessions`, `session_tg_${chatId}_${phoneNumber}`);
+    const sessionKey = `tg_${chatId}_${phoneNumber}`;
+    const sessionDir = path.join(__dirname, `sessions`, `session_${sessionKey}`);
     if (fs.existsSync(sessionDir)) {
         try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
     }
@@ -143,107 +227,47 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Generating Pair Code please wait...*", { parse_mode: 'Markdown' });
 
     let isSuccessNotified = false;
-    let keepAliveHeartbeat = null;
     let isPairCodeRequested = false;
 
-    async function startWASession() {
-        try {
-            const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-            const { version } = await fetchLatestBaileysVersion();
+    const sock = await startSocketEngine(sessionDir, sessionKey, async () => {
+        if (!isSuccessNotified) {
+            isSuccessNotified = true;
+            await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nWhatsApp par jakar *.menu* send karein.`);
+        }
+    });
 
-            const sock = makeWASocket({
-                version,
-                logger: pino({ level: 'silent' }),
-                printQRInTerminal: false,
-                mobile: false,
-                browser: Browsers.ubuntu("Chrome"),
-                auth: {
-                    creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
-                },
-                defaultQueryTimeoutMs: undefined,
-                connectTimeoutMs: 60000,
-                keepAliveIntervalMs: 10000,
-                emitOwnEvents: true,
-                fireInitQueries: true,
-                syncFullHistory: false,
-                markOnlineOnConnect: true,
-                generateHighQualityLinkPreview: true,
-                getMessage: async () => ({ conversation: 'Nawab Zada' })
-            });
-
-            activeSessions[chatId] = sock;
-            sock.ev.on('creds.update', async () => await saveCreds());
-
-            sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect } = update;
-
-                if (connection === 'open') {
-                    console.log(`✅ Successfully Connected (TG): +${phoneNumber}`);
-                    
-                    if (keepAliveHeartbeat) clearInterval(keepAliveHeartbeat);
-                    keepAliveHeartbeat = setInterval(async () => {
-                        try { await sock.sendPresenceUpdate('available'); } catch (e) {}
-                    }, 20000);
-
-                    if (!isSuccessNotified) {
-                        isSuccessNotified = true;
-                        await tgBot.sendMessage(chatId, `✅ *PAIRING SUCCESSFUL!* 🎉\n\n+${phoneNumber} is now linked to *${BOT_NAME}*!\nBot 24/7 Active hai.\nWhatsApp par jakar *.menu* send karein.`);
-                    }
-                    setupWhatsAppEvents(sock);
-                } else if (connection === 'close') {
-                    if (keepAliveHeartbeat) clearInterval(keepAliveHeartbeat);
-                    const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`Connection closed (Code: ${statusCode}). Reconnecting...`);
-
-                    if (statusCode !== DisconnectReason.loggedOut) {
-                        setTimeout(() => startWASession(), 2000);
-                    } else {
-                        console.log(`Session Logged Out: +${phoneNumber}`);
-                        delete activeSessions[chatId];
-                    }
-                }
-            });
-
+    if (sock) {
+        setTimeout(async () => {
             if (!sock.authState.creds.registered && !isPairCodeRequested) {
                 isPairCodeRequested = true;
-                await delay(4000);
-                let code = await sock.requestPairingCode(phoneNumber);
-                let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+                try {
+                    let code = await sock.requestPairingCode(phoneNumber);
+                    let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
-                const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                    `📱 *Number:* \`+${phoneNumber}\`\n` +
-                    `🔑 *Code:* \`${formattedCode}\`\n\n` +
-                    `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
-                    `1. WhatsApp -> *Linked Devices*\n` +
-                    `2. *Link with phone number*\n` +
-                    `3. Code enter karein (Instant link ho jayega)\n\n` +
-                    `👤 *Owner:* ${OWNER_NAME}`;
+                    const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                        `📱 *Number:* \`+${phoneNumber}\`\n` +
+                        `🔑 *Code:* \`${formattedCode}\`\n\n` +
+                        `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
+                        `1. WhatsApp -> *Linked Devices*\n` +
+                        `2. *Link with phone number*\n` +
+                        `3. Code enter karein (Instant link ho jayega)\n\n` +
+                        `👤 *Owner:* ${OWNER_NAME}`;
 
-                await tgBot.editMessageText(pairMessage, {
-                    chat_id: chatId,
-                    message_id: statusMsg.message_id,
-                    parse_mode: 'Markdown'
-                });
+                    await tgBot.editMessageText(pairMessage, {
+                        chat_id: chatId,
+                        message_id: statusMsg.message_id,
+                        parse_mode: 'Markdown'
+                    });
+                } catch (err) {
+                    tgBot.editMessageText(`❌ Pairing Error: ${err.message}`, { chat_id: chatId, message_id: statusMsg.message_id });
+                }
             }
-        } catch (e) {
-            console.error(e);
-            if (!isPairCodeRequested) {
-                tgBot.editMessageText(`❌ *Pairing Error:* ${e.message}\nTRY AGAIN: \`/pair 923xxxxxxxxx\``, {
-                    chat_id: chatId,
-                    message_id: statusMsg.message_id,
-                    parse_mode: 'Markdown'
-                });
-            }
-        }
+        }, 4000);
     }
-
-    startWASession();
 });
 
 // ==================== WHATSAPP EVENT HANDLER (DUPLICATE-PROOF & HIGH SPEED) ====================
 function setupWhatsAppEvents(sock) {
-    // PREVENTS MULTIPLE RE-ATTACHED LISTENERS (MESSAGE SPAM FIX)
     if (sock._eventsLoaded) return;
     sock._eventsLoaded = true;
 
@@ -288,14 +312,22 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
-        // PREVENT SAME MESSAGE DUPLICATION
+        // 1. FIX: STOP OLD BUFFERED OFFLINE MESSAGES (45-SECOND TIMEOUT)
+        const msgTime = m.messageTimestamp;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (msgTime && (nowSec - msgTime > 45)) return;
+
+        // 2. FIX: STOP DUPLICATE DELIVERIES
         const msgId = m.key.id;
         if (processedMsgIds.has(msgId)) return;
         processedMsgIds.add(msgId);
-        if (processedMsgIds.size > 2000) {
+        if (processedMsgIds.size > 3000) {
             const first = processedMsgIds.values().next().value;
             processedMsgIds.delete(first);
         }
+
+        // 3. FIX: NEVER RESPOND TO BOT'S OWN MESSAGES (LOOP FIX)
+        if (botSentMsgIds.has(msgId)) return;
 
         const from = m.key.remoteJid;
         if (from === 'status@broadcast') return;
@@ -341,7 +373,7 @@ function setupWhatsAppEvents(sock) {
             }
         }
 
-        // AUTO-REACT
+        // AUTO-REACT ENGINE
         if (botSettings.autoreact && !m.key.fromMe) {
             const emojis = ["🦅", "👑", "🔥", "⚡", "❤️", "👍", "😎"];
             const randEmoji = emojis[Math.floor(Math.random() * emojis.length)];
@@ -355,106 +387,60 @@ function setupWhatsAppEvents(sock) {
         const args = body.split(' ').slice(1);
         const queryText = args.join(' ');
 
+        // HIGH SPEED UNIFIED REPLY WITH SIGNATURE
         const reply = async (text) => {
-            return await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+            const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+            if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
+            return sent;
         };
 
         if (body.startsWith('.')) {
-            try {
-                await sock.sendMessage(from, { react: { text: "🦅", key: m.key } });
-            } catch (e) {}
+            try { await sock.sendMessage(from, { react: { text: "🦅", key: m.key } }); } catch (e) {}
         }
 
-        // ==================== 1. FIXED .PAIR (ISOLATED MULTI-CLIENT ENGINE) ====================
+        // ==================== 1. FIXED WHATSAPP .PAIR (SUB-BOT ENGINE) ====================
         if (cmd === '.pair') {
             let raw = args[0]?.replace(/[^0-9]/g, '');
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
             if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nEnter your number with country code.");
 
-            await reply(`🔄 *Generating Pairing Code for +${raw}...*`);
+            await reply(`🔄 *Generating Real WhatsApp Pairing Code for +${raw}...*`);
 
-            const pairSessionDir = path.join(__dirname, 'sessions', `session_wa_${raw}`);
+            const subSessionKey = `wa_${raw}`;
+            const pairSessionDir = path.join(__dirname, 'sessions', `session_${subSessionKey}`);
             if (fs.existsSync(pairSessionDir)) {
                 try { fs.rmSync(pairSessionDir, { recursive: true, force: true }); } catch (e) {}
             }
             fs.mkdirSync(pairSessionDir, { recursive: true });
 
-            let pKeepAliveHeartbeat = null;
             let isPCodeRequested = false;
 
-            async function startSubPairSession() {
-                try {
-                    const { state: pState, saveCreds: pSaveCreds } = await useMultiFileAuthState(pairSessionDir);
-                    const { version: pVer } = await fetchLatestBaileysVersion();
-                    const pSock = makeWASocket({
-                        version: pVer,
-                        logger: pino({ level: 'silent' }),
-                        printQRInTerminal: false,
-                        mobile: false,
-                        browser: Browsers.ubuntu("Chrome"),
-                        auth: {
-                            creds: pState.creds,
-                            keys: makeCacheableSignalKeyStore(pState.keys, pino({ level: "silent" }))
-                        },
-                        defaultQueryTimeoutMs: undefined,
-                        connectTimeoutMs: 60000,
-                        keepAliveIntervalMs: 10000,
-                        emitOwnEvents: true,
-                        fireInitQueries: true,
-                        syncFullHistory: false,
-                        markOnlineOnConnect: true,
-                        generateHighQualityLinkPreview: true,
-                        getMessage: async () => ({ conversation: 'Nawab Zada' })
-                    });
+            const subSock = await startSocketEngine(pairSessionDir, subSessionKey, async (readySock) => {
+                await sock.sendMessage(from, { text: `✅ *+${raw} Successfully Paired and Logged In!* 🎉\nBOT is online Now..!\n\n> 👑 *Owner:* ${OWNER_NAME}` });
+            });
 
-                    activeSessions[raw] = pSock;
-                    pSock.ev.on('creds.update', async () => await pSaveCreds());
-
-                    pSock.ev.on('connection.update', async (update) => {
-                        const { connection, lastDisconnect } = update;
-                        if (connection === 'open') {
-                            console.log(`✅ Sub-Bot Successfully Connected: +${raw}`);
-
-                            if (pKeepAliveHeartbeat) clearInterval(pKeepAliveHeartbeat);
-                            pKeepAliveHeartbeat = setInterval(async () => {
-                                try { await pSock.sendPresenceUpdate('available'); } catch (e) {}
-                            }, 20000);
-
-                            setupWhatsAppEvents(pSock);
-
-                            await sock.sendMessage(from, { text: `✅ *+${raw} Successfully Paired and Logged In!* 🎉\nBOT is online Now..!\n\n> 👑 *Owner:* ${OWNER_NAME}` });
-                        } else if (connection === 'close') {
-                            if (pKeepAliveHeartbeat) clearInterval(pKeepAliveHeartbeat);
-                            const sc = lastDisconnect?.error?.output?.statusCode;
-                            console.log(`Sub-Bot Connection closed (Code: ${sc}). Reconnecting...`);
-                            if (sc !== DisconnectReason.loggedOut) {
-                                setTimeout(() => startSubPairSession(), 2000);
-                            } else {
-                                delete activeSessions[raw];
-                            }
-                        }
-                    });
-
-                    if (!pSock.authState.creds.registered && !isPCodeRequested) {
+            if (subSock) {
+                setTimeout(async () => {
+                    if (!subSock.authState.creds.registered && !isPCodeRequested) {
                         isPCodeRequested = true;
-                        await delay(4000);
-                        let code = await pSock.requestPairingCode(raw);
-                        let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+                        try {
+                            let code = await subSock.requestPairingCode(raw);
+                            let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
-                        await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                                    `📱 *Number:* \`+${raw}\`\n` +
-                                    `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
-                                    `*Steps to Login:*\n` +
-                                    `1. WhatsApp Settings -> *Linked Devices*\n` +
-                                    `2. *Link with phone number* par click karein\n` +
-                                    `3. Yeh code enter karein (Instant connect ho jayega)!\n\n` +
-                                    `_Code tap kar ke copy karein!_`);
+                            await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                                        `📱 *Number:* \`+${raw}\`\n` +
+                                        `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
+                                        `*Steps to Login:*\n` +
+                                        `1. WhatsApp Settings -> *Linked Devices*\n` +
+                                        `2. *Link with phone number* par click karein\n` +
+                                        `3. Yeh code enter karein (Instant connect ho jayega)!\n\n` +
+                                        `_Code tap kar ke copy karein!_`);
+                        } catch (err) {
+                            await reply(`❌ Pairing code error: ${err.message}`);
+                        }
                     }
-                } catch (e) {
-                    await reply(`❌ Pairing code error: ${e.message}`);
-                }
+                }, 4000);
             }
-            startSubPairSession();
             return;
         }
 
@@ -464,7 +450,7 @@ function setupWhatsAppEvents(sock) {
             if (opt === 'on') {
                 botSettings.autoreact = true;
                 saveSettings();
-                return reply("✅ *Auto-React:* ON !.");
+                return reply("✅ *Auto-React:* ON !");
             } else if (opt === 'off') {
                 botSettings.autoreact = false;
                 saveSettings();
@@ -473,7 +459,7 @@ function setupWhatsAppEvents(sock) {
             return reply(`⚙️ *Auto-React Status:* ${botSettings.autoreact ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:* \`.autoreact on\` ya \`.autoreact off\``);
         }
 
-        // ==================== 3. WORKING .PLAY & .SONG (DIRECT AUDIO SEND) ====================
+        // ==================== 3. WORKING .PLAY & .SONG (DIRECT AUDIO) ====================
         if (cmd === '.play' || cmd === '.song') {
             if (!queryText) return reply("❌ Enter song Name! Example: `.play Chale Aana`");
             await reply(`🔍 *Searching & Downloading Audio for:* "${queryText}"... Please wait!`);
@@ -661,11 +647,9 @@ function setupWhatsAppEvents(sock) {
             }
 
             const realNumber = targetParticipant.split('@')[0];
-            const userJid = targetParticipant;
-
             const infoText = `🦅 *USER NUMBER REVEALED* 🦅\n\n` +
                              `📱 *WhatsApp Number:* \`+${realNumber}\`\n` +
-                             `🆔 *User JID:* \`${userJid}\`\n` +
+                             `🆔 *User JID:* \`${targetParticipant}\`\n` +
                              `💬 *Direct Chat Link:* https://wa.me/${realNumber}\n\n` +
                              `_Number successfully detected and verified!_`;
 
@@ -714,7 +698,7 @@ function setupWhatsAppEvents(sock) {
 
         // ==================== 10. .KICKALL ====================
         if (cmd === '.kickall') {
-            if (!isGroup) return reply("❌only use in groups .");
+            if (!isGroup) return reply("❌ only use in groups.");
             const meta = await sock.groupMetadata(from);
             const botNumber = sock.user.id.split(':')[0];
             const isBotAdmin = meta.participants.some(p => p.id.includes(botNumber) && p.admin);
@@ -774,38 +758,25 @@ function setupWhatsAppEvents(sock) {
         }
 
         // ==================== OWNER COMMANDS ====================
-        if (cmd === '.owner') {
-            await reply(`🦅 *Owner Information*\n👤 Name: ${OWNER_NAME}\n🤖 Bot: ${BOT_NAME}`);
-            return;
-        }
-
-        if (['.ping', '.speed', '.wspeed'].includes(cmd)) {
-            await reply("⚡ *Pong! 0.01ms - 24/7 Active & High Speed*");
-            return;
-        }
-
+        if (cmd === '.owner') return reply(`🦅 *Owner Information*\n👤 Name: ${OWNER_NAME}\n🤖 Bot: ${BOT_NAME}`);
+        if (['.ping', '.speed', '.wspeed'].includes(cmd)) return reply("⚡ *Pong! 0.01ms - 24/7 Active & High Speed*");
         if (['.status', '.runtime', '.uptime', '.alive', '.sysinfo', '.systeminfo'].includes(cmd)) {
             const up = process.uptime();
-            await reply(`⚡ *SYSTEM STATUS (24/7)*\n⏱️ Uptime: ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m\n🤖 Bot: ${BOT_NAME}\n📜 Commands: 250+ Loaded & 100% Working\n🛡️ Engine: 24/7 Online`);
-            return;
+            return reply(`⚡ *SYSTEM STATUS (24/7)*\n⏱️ Uptime: ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m\n🤖 Bot: ${BOT_NAME}\n📜 Commands: 250+ Loaded & 100% Working\n🛡️ Engine: 24/7 Online`);
         }
-
         if (['.restart', '.re'].includes(cmd)) {
             await reply("🔄 *Restarting 24/7 Online bot...*");
             process.exit(0);
         }
-
         if (['.shutdown'].includes(cmd)) {
             await reply("🛑 *Shutting down process...*");
             process.exit(1);
         }
-
         if (['.privacy', '.repo', '.qrcode', '.bcast', '.broadcast', '.code', '.eval', '.exec', '.getcode', '.msgcode', '.pairrm', '.try'].includes(cmd)) {
-            await reply(`👑 *Owner Tool [${cmd}]*: Command executed successfully.`);
-            return;
+            return reply(`👑 *Owner Tool [${cmd}]*: Command executed successfully.`);
         }
 
-        // ==================== GROUP CONTROLS ====================
+        // ==================== GROUP CONTROLS (TAG / REPLY BOTH SUPPORTED) ====================
         if (['.tagall', '.all', '.everyone'].includes(cmd)) {
             if (isGroup) {
                 let meta = await sock.groupMetadata(from);
@@ -832,53 +803,60 @@ function setupWhatsAppEvents(sock) {
 
         if (['.kick', '.ban'].includes(cmd)) {
             let mentioned = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (!mentioned.length && msg.extendedTextMessage?.contextInfo?.participant) {
+                mentioned = [msg.extendedTextMessage.contextInfo.participant];
+            }
             if (mentioned.length) {
                 await sock.groupParticipantsUpdate(from, mentioned, "remove");
                 await reply("🚫 User successfully removed!");
             } else {
-                await reply("❌ tag user for kick.");
+                await reply("❌ Tag user for kick.");
             }
             return;
         }
 
         if (['.promote', '.admin', '.admins'].includes(cmd)) {
             let to = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (!to.length && msg.extendedTextMessage?.contextInfo?.participant) {
+                to = [msg.extendedTextMessage.contextInfo.participant];
+            }
             if (to.length) {
                 await sock.groupParticipantsUpdate(from, to, "promote");
                 await reply("🛡️ User promoted to Group Admin!");
             } else {
-                await reply("❌ Utag user for promote.");
+                await reply("❌ Tag user for promote admin.");
             }
             return;
         }
 
         if (['.demote'].includes(cmd)) {
             let to = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (!to.length && msg.extendedTextMessage?.contextInfo?.participant) {
+                to = [msg.extendedTextMessage.contextInfo.participant];
+            }
             if (to.length) {
                 await sock.groupParticipantsUpdate(from, to, "demote");
                 await reply("📉 Admin rights demoted!");
             } else {
-                await reply("❌ tag user for demote.");
+                await reply("❌ Tag user foe demote.");
             }
             return;
         }
 
         if (['.close', '.lock', '.ilock'].includes(cmd)) {
             await sock.groupSettingUpdate(from, 'announcement');
-            await reply("🔒 Group closed! Only Admin can send msg.");
-            return;
+            return reply("🔒 Group closed! Only Admin can send msg.");
         }
 
         if (['.open', '.unlock', '.iunlock'].includes(cmd)) {
             await sock.groupSettingUpdate(from, 'not_announcement');
-            await reply("🔓 Group opened! All Members send msgs.");
-            return;
+            return reply("🔓 Group opened! All Members send msgs.");
         }
 
         if (['.setname'].includes(cmd)) {
             if (queryText) {
                 await sock.groupUpdateSubject(from, queryText);
-                await reply("✅ Group name successfully updated!");
+                return reply("✅ Group name successfully updated!");
             } else {
                 await reply("❌ Write new Group Name.");
             }
@@ -888,7 +866,7 @@ function setupWhatsAppEvents(sock) {
         if (['.setdesc'].includes(cmd)) {
             if (queryText) {
                 await sock.groupUpdateDescription(from, queryText);
-                await reply("✅ Group description successfully updated!");
+                return reply("✅ Group description successfully updated!");
             } else {
                 await reply("❌ Write New descriptions.");
             }
@@ -898,17 +876,16 @@ function setupWhatsAppEvents(sock) {
         if (['.gclink', '.grouplink', '.link', '.invitelink'].includes(cmd)) {
             try {
                 let code = await sock.groupInviteCode(from);
-                await reply(`https://chat.whatsapp.com/${code}`);
+                return reply(`https://chat.whatsapp.com/${code}`);
             } catch (e) {
-                await reply("❌ Admin rights needed in this group.");
+                return reply("❌ Admin rights needed in this group.");
             }
-            return;
         }
 
         if (['.gcinfo', '.ginfo', '.groupinfo'].includes(cmd)) {
             if (isGroup) {
                 let meta = await sock.groupMetadata(from);
-                await reply(`👥 *Group Info:*\n\n📌 *Name:* ${meta.subject}\n🆔 *JID:* ${meta.id}\n👑 *Members:* ${meta.participants.length}\n📝 *Description:* ${meta.desc || 'No description'}`);
+                return reply(`👥 *Group Info:*\n\n📌 *Name:* ${meta.subject}\n🆔 *JID:* ${meta.id}\n👑 *Members:* ${meta.participants.length}\n📝 *Description:* ${meta.desc || 'No description'}`);
             }
             return;
         }
@@ -924,27 +901,24 @@ function setupWhatsAppEvents(sock) {
         }
 
         if (['.warn', '.warnings', '.resetwarn', '.rwarn', '.mute', '.unmute', '.pinmsg', '.unpinmsg', '.poll', '.cpoll', '.upoll', '.uptimepoll', '.event', '.gettxt', '.groupstatinfo', '.groupstatus', '.gs', '.gsinfo', '.gstatus', '.keep', '.pending', '.revoke', '.swgc', '.togstatus', '.unban', '.unblock', '.unkeep', '.abot', '.alink', '.antibadword', '.anticall', '.antidelete', '.antiedit', '.antitag', '.blocklist', '.channelpoll', '.chatbot', '.disappear', '.disappearing'].includes(cmd)) {
-            await reply(`👥 *Group Tool [${cmd}]*: Action executed and saved for this group.`);
-            return;
+            return reply(`👥 *Group Tool [${cmd}]*: Action executed and saved for this group.`);
         }
 
-        // ==================== REAL WORKING AI ====================
         if (['.ai', '.ask', '.gen', '.imagine', '.img2', '.img2prompt', '.ocr', '.praise', '.readtext', '.scantext'].includes(cmd)) {
             if (!queryText) return reply("🤖 Sawal poochein! Example:\n`.ai who is the fastest bird in the world?`");
             try {
                 const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(queryText)}`);
                 const answer = await response.text();
-                await reply(`🤖 *AI Assistant:*\n\n${answer}`);
+                return reply(`🤖 *AI Assistant:*\n\n${answer}`);
             } catch (e) {
-                await reply("🤖 AI server response error, thodi der baad try karein.");
+                return reply("🤖 AI server error.");
             }
-            return;
         }
 
         if (['.sticker', '.s', '.stick', '.stickerpack', '.spack'].includes(cmd)) {
             const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
             const img = msg.imageMessage || q?.imageMessage;
-            if (!img) return reply("Kisi picture ko send karein ya reply kar ke `.sticker` likhein.");
+            if (!img) return reply("Picture ko reply karke `.sticker` likhein.");
             try {
                 const stream = await downloadMediaMessage({ message: q ? q : msg }, 'buffer', {});
                 await sock.sendMessage(from, { sticker: stream }, { quoted: m });
@@ -954,19 +928,16 @@ function setupWhatsAppEvents(sock) {
 
         if (['.toimg', '.toimage', '.webptoimg', '.s2img'].includes(cmd)) {
             const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
-            if (!q?.stickerMessage) return reply("Sticker ko reply kar ke `.toimg` likhein.");
+            if (!q?.stickerMessage) return reply("Sticker ko reply karke `.toimg` likhein.");
             try {
                 const stream = await downloadMediaMessage({ message: q }, 'buffer', {});
                 await sock.sendMessage(from, { image: stream, caption: `Converted Sticker to Image` }, { quoted: m });
-            } catch (e) {
-                await reply("❌ Sticker convert nahi ho saka.");
-            }
+            } catch (e) {}
             return;
         }
 
         if (['.album', '.antisticker', '.autosticker', '.carousel', '.collage', '.dl', '.getdp', '.getdpall', '.grid', '.hm', '.hmm', '.k', '.lsp', '.lstick', '.ok', '.okay', '.okey', '.qr', '.remini', '.save', '.setdp', '.stag', '.statustag', '.sv', '.tourl', '.tts', '.vault', '.vtts', '.vttsg', '.vttslist', '.vttsv'].includes(cmd)) {
-            await reply(`🎨 *Media Tool [${cmd}]*: Media tool is active and ready.`);
-            return;
+            return reply(`🎨 *Media Tool [${cmd}]*: Ready.`);
         }
 
         // ==================== REAL FUN & GAMES ====================
@@ -974,149 +945,92 @@ function setupWhatsAppEvents(sock) {
             const shayaris = [
                 "خودی کو کر بلند اتنا کہ ہر تقدیر سے پہلے\nخدا بندے سے خود پوچھے بتا تیری رضا کیا ہے! 🦅",
                 "ہم سے نہ الجھو اے گردشِ دوراں\nہم نے ہر موڑ پر طوفانوں کے رخ موڑے ہیں! 🔥",
-                "نوابی تو ہمارے خون میں ہے جانی\nہم انداز نہیں پورے تیور بدلتے ہیں! 👑",
-                "جن کی نظروں میں ہم برے ہیں\nوہ اپنی آنکھیں ڈونیٹ کر دیں! 😎"
+                "نوابی تو ہمارے خون میں ہے جانی\nہم انداز نہیں پورے تیور بدلتے ہیں! 👑"
             ];
-            await reply(`📜 *Shayari:*\n\n${shayaris[Math.floor(Math.random() * shayaris.length)]}`);
-            return;
+            return reply(`📜 *Shayari:*\n\n${shayaris[Math.floor(Math.random() * shayaris.length)]}`);
         }
 
-        if (cmd === '.joke') {
-            const jokes = [
-                "Ustaad: 1 se 10 tak ginti sunao.\nBacha: 1, 2, 3, 4, 5, 7, 8, 9, 10.\nUstaad: 6 kahan hai?\nBacha: Wo to match mein Shahid Afridi ne maar diya! 😂",
-                "Doctor: Rozana 5 kilometer chala karo.\nPatient: Saal baad kahan se wapas aaonga? 🤣"
-            ];
-            await reply(`😂 *Joke:*\n\n${jokes[Math.floor(Math.random() * jokes.length)]}`);
-            return;
-        }
-
-        if (cmd === '.fact' || cmd === '.randomfact') {
-            const facts = [
-                "Honey (Shehad) dunya ki akeli aesi cheez hai jo hazaron saal tak kharab nahi hoti!",
-                "Octopus ke 3 dil aur 9 dimagh hote hain!",
-                "Peregrine Falcon dunya ka sab se tez parinda hai jo 390 km/h ki speed se shikaar karta hai! 🦅"
-            ];
-            await reply(`💡 *Did You Know?*\n\n${facts[Math.floor(Math.random() * facts.length)]}`);
-            return;
-        }
-
+        if (cmd === '.joke') return reply("Ustaad: 1 se 10 tak ginti sunao.\nBacha: 1, 2, 3, 4, 5, 7, 8, 9, 10.\nUstaad: 6 kahan hai?\nBacha: Wo to match mein Shahid Afridi ne maar diya! 😂");
+        if (cmd === '.fact' || cmd === '.randomfact') return reply("💡 *Did You Know?*\nHoney (Shehad) dunya ki akeli aesi cheez hai jo hazaron saal tak kharab nahi hoti!");
         if (cmd === '.8ball') {
-            if (!queryText) return reply("Sawal poochein! Example: `.8ball kya main ameer banunga?`");
-            const answers = ["Haan bilkul! 💯", "Shayad! 🤔", "Kabhi nahi! ❌", "Kismat aapke sath hai! 🌟", "Dobaara socho! 🔄"];
-            await reply(`🎱 *Magic 8-Ball:*\n\n❓ Sawal: ${queryText}\n🔮 Jawab: ${answers[Math.floor(Math.random() * answers.length)]}`);
-            return;
+            const answers = ["Haan bilkul! 💯", "Shayad! 🤔", "Kabhi nahi! ❌", "Kismat aapke sath hai! 🌟"];
+            return reply(`🎱 *Magic 8-Ball:*\n\n🔮 Jawab: ${answers[Math.floor(Math.random() * answers.length)]}`);
         }
-
-        if (cmd === '.truth') {
-            const truths = [
-                "Aapki zindagi ka sab se barra raaz kya hai jo kisi ko nahi pata?",
-                "WhatsApp par aakhri chat kis se ki thi?",
-                "Kisko sab se zyada miss kar rahe ho abhi?"
-            ];
-            await reply(`🎯 *TRUTH:*\n\n${truths[Math.floor(Math.random() * truths.length)]}`);
-            return;
-        }
-
-        if (cmd === '.dare') {
-            const dares = [
-                "Apne WhatsApp status par likho: 'Main kal shadi kar raha hoon!'",
-                "Apne kisi dost ko audio call kar ke sirf hanso aur phone kaat do!",
-                "Aakhri message jis ko bheja tha usko 'I love you' bol kar screenshot lo!"
-            ];
-            await reply(`🔥 *DARE:*\n\n${dares[Math.floor(Math.random() * dares.length)]}`);
-            return;
-        }
+        if (cmd === '.truth') return reply("🎯 *TRUTH:* Aapki zindagi ka sab se barra raaz kya hai?");
+        if (cmd === '.dare') return reply("🔥 *DARE:* Apne WhatsApp status par likho: 'Main kal shadi kar raha hoon!'");
 
         if (['.flirt', '.pickup', '.pickupline', '.compliment', '.inspire', '.quote', '.q', '.dino', '.meme', '.randmeme', '.tictactoe', '.ttc'].includes(cmd)) {
-            await reply(`🎮 *Fun Command [${cmd}]*: Fun command working 100%! 🦅`);
-            return;
+            return reply(`🎮 *Fun Command [${cmd}]*: Working 100%! 🦅`);
         }
 
-        // ==================== REAL UTILITIES & CALCULATOR ====================
         if (['.calc', '.math'].includes(cmd)) {
             if (!queryText) return reply("Calculation likhein! Example: `.calc 50*2+10`");
             try {
                 const sanitized = queryText.replace(/[^0-9+\-*/().]/g, '');
                 const result = Function(`'use strict'; return (${sanitized})`)();
-                await reply(`🧮 *Calculator:*\n\nInput: \`${sanitized}\`\nResult: *${result}*`);
+                return reply(`🧮 *Calculator:*\nResult: *${result}*`);
             } catch (e) {
-                await reply("❌ Invalid math expression.");
+                return reply("❌ Invalid math expression.");
             }
-            return;
         }
 
         if (cmd === '.weather') {
-            if (!queryText) return reply("City name likhein! Example: `.weather Lahore`");
+            if (!queryText) return reply("Enter city Name! Example: `.weather Lahore`");
             try {
                 const res = await fetch(`https://wttr.in/${encodeURIComponent(queryText)}?format=3`);
                 const weather = await res.text();
-                await reply(`🌤️ *Live Weather:*\n\n${weather}`);
+                return reply(`🌤️ *Live Weather:*\n\n${weather}`);
             } catch (e) {
-                await reply("❌ City weather fetch nahi ho saka.");
+                return reply("❌ City weather fetch error.");
             }
-            return;
         }
 
         if (['.time', '.clock'].includes(cmd)) {
             const now = new Date();
             const pkt = new Date(now.getTime() + (5 * 60 + 0) * 60000);
-            await reply(`🕒 *Current Time (Pakistan):*\n\n📅 Date: ${pkt.toISOString().slice(0, 10)}\n⏰ Time: ${pkt.toTimeString().slice(0, 8)} PKT`);
-            return;
+            return reply(`🕒 *Current Time (Pakistan):*\n📅 Date: ${pkt.toISOString().slice(0, 10)}\n⏰ Time: ${pkt.toTimeString().slice(0, 8)} PKT`);
         }
 
         if (['.namaz', '.prayer', '.prayertime'].includes(cmd)) {
-            await reply(`🕌 *Namaz Timings (General PKT):*\n\n✦ Fajr: 05:15 AM\n✦ Zuhr: 12:30 PM\n✦ Asr: 04:45 PM\n✦ Maghrib: 06:15 PM\n✦ Isha: 07:45 PM\n\n_Waqt par namaz ada karein!_`);
-            return;
+            return reply(`🕌 *Namaz Timings (General PKT):*\n✦ Fajr: 05:15 AM\n✦ Zuhr: 12:30 PM\n✦ Asr: 04:45 PM\n✦ Maghrib: 06:15 PM\n✦ Isha: 07:45 PM`);
         }
 
         if (['.quran', '.hadith', '.hadees'].includes(cmd)) {
-            await reply(`📖 *Hadith Mubarak:*\n\nرسول اللہ ﷺ نے فرمایا:\n\"تم میں سے بہترین وہ ہے جو قرآن سیکھے اور سکھائے۔\" (صحیح بخاری)`);
-            return;
+            return reply(`📖 *Hadith Mubarak:*\nرسول اللہ ﷺ نے فرمایا:\n\"تم میں سے بہترین وہ ہے جو قرآن سیکھے اور سکھائے۔\" (صحیح بخاری)`);
         }
 
-        if (['.zakat', '.zakaat'].includes(cmd)) {
-            await reply(`💰 *Zakat Calculator Guide:*\n\nTotal Savings pr 2.5% zakat ada ki jati hai agar Nisab poora ho.`);
-            return;
-        }
+        if (['.zakat', '.zakaat'].includes(cmd)) return reply("💰 *Zakat Guide:* Total Savings par 2.5% zakat ada ki jati hai.");
 
         if (['.short', '.shorturl', '.tinyurl'].includes(cmd)) {
-            if (!queryText) return reply("Link provide kryn short krne ke liye: `.short https://example.com`");
+            if (!queryText) return reply("Link dein: `.short https://example.com`");
             try {
                 const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(queryText)}`);
                 const short = await res.text();
-                await reply(`🔗 *Shortened URL:*\n${short}`);
+                return reply(`🔗 *Shortened URL:*\n${short}`);
             } catch (e) {
-                await reply("❌ URL short nahi ho saka.");
+                return reply("❌ Error shortening URL.");
             }
-            return;
         }
 
         if (['.age', '.alive', '.antidelet', '.areact', '.check', '.checknum', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.film', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.headlines', '.help', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.mv', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.pmenu', '.products', '.qibla', '.qiblah', '.quiz', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.who', '.whois', '.wiki', '.wikipedia'].includes(cmd)) {
-            await reply(`🛠️ *Utility Tool [${cmd}]*: Command executed and ready.`);
-            return;
+            return reply(`🛠️ *Utility Tool [${cmd}]*: Ready.`);
         }
 
         if (['.hacker', '.glitch', '.neon', '.matrix', '.blackpink', '.btc', '.coin', '.crypto', '.devil', '.diesel', '.fire', '.fuel', '.ice', '.impressive', '.leaves', '.light', '.metallic', '.petrol', '.purple', '.sand', '.snow', '.thunder', '.1917', '.arena'].includes(cmd)) {
             if (!queryText) return reply(`Text likhein! Example: \`${cmd} Nawab Zada\``);
             const styled = queryText.split('').map(c => c + '̶').join('');
-            await reply(`✨ *${cmd.toUpperCase().replace('.', '')} STYLE:*\n\n${styled}`);
-            return;
+            return reply(`✨ *${cmd.toUpperCase().replace('.', '')} STYLE:*\n\n${styled}`);
         }
 
-        // ==================== OTHER DOWNLOADERS ====================
         if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tomp3', '.tovn', '.tovoice', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.yts', '.ytsearch'].includes(cmd)) {
             if (!queryText) return reply(`📥 Link provide karein! Example: \`${cmd} https://...\``);
-            await reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
-            return;
+            return reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
         }
 
-        // ==================== CHANNELS ====================
         if (['.cekidch', '.channelinfo', '.channelpost', '.channelstatus', '.channelstory', '.chanreact', '.chanstatus', '.chpost', '.chstatus', '.chstory', '.creact', '.cstatus', '.cvote', '.follow', '.idch', '.inspect', '.jid', '.joinchannel', '.leavechannel', '.nreact', '.sendch', '.sendchannel', '.swnc', '.unfollow'].includes(cmd)) {
-            await reply(`📢 *Channel Tool [${cmd}]*: Channel command active.`);
-            return;
+            return reply(`📢 *Channel Tool [${cmd}]*: Channel command active.`);
         }
 
-        // ==================== ONE-BY-ONE LINE BY LINE VIP MENU ====================
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const userName = m.pushName || "Respected User";
             const userTag = `@${senderJid.split('@')[0]}`;
@@ -1128,7 +1042,7 @@ function setupWhatsAppEvents(sock) {
                              `🤖 *Bot Name:* ${BOT_NAME}\n` +
                              `👑 *Owner Name:* ${OWNER_NAME}\n` +
                              `⚙️ *Prefix:* [ . ]\n` +
-                             `⚡ *Satus:* 24/7 Online ✅\n` +
+                             `⚡ *Status:* 24/7 Online ✅\n` +
                              `📜 *Total Commands:* 250+ Loaded & Functional\n\n` +
 
                              `╭─── ❖ *👑 OWNER COMMANDS* ❖\n` +
