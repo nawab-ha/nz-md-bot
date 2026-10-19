@@ -65,7 +65,7 @@ const activeSessions = {};
 const processedMsgIds = new Set();
 const botSentMsgIds = new Set();
 
-console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
+console.log(`[+] ${BOT_NAME} 24/7  Active...`);
 
 async function restoreAllSessions() {
     try {
