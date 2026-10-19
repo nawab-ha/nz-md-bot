@@ -3,11 +3,11 @@ const {
     default: makeWASocket, 
     useMultiFileAuthState, 
     delay, 
-    makeCacheableSignalKeyStore,
+    makeCacheableSignalKeyStore, 
     downloadMediaMessage, 
     fetchLatestBaileysVersion, 
-    DisconnectReason,
-    Browsers
+    DisconnectReason, 
+    Browsers 
 } = require("@whiskeysockets/baileys");
 const pino = require('pino');
 const fs = require('fs');
@@ -17,11 +17,12 @@ const http = require('http');
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`NAWAB ZADA HACKER MD BOT - 24/7 is ONLINE!`);
+    res.end(`NAWAB ZADA HACKER MD BOT is ONLINE!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Keep-Alive Server running on port ${PORT}`);
 });
 
+// CRASH PREVENTION SYSTEM
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
@@ -40,7 +41,6 @@ if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
     fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
 }
 
-// PERSISTENT SETTINGS (ANTILINK & AUTOREACT)
 const antilinkFile = path.join(__dirname, 'antilink.json');
 let antilinkDB = {};
 if (fs.existsSync(antilinkFile)) {
@@ -60,16 +60,19 @@ const saveSettings = () => {
 };
 
 const activeSessions = {};
+// MESSAGE DEDUPLICATION CACHE (ROKTA HAI REPEATED MESSAGES KO)
+const processedMsgIds = new Set();
 
-console.log(`[+] ${BOT_NAME} 24/7 BOT Active - All Commands Loaded...`);
+console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
 
+// ==================== TELEGRAM BOT MODULE ====================
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     let caption = `╔════════════════════════╗\n` +
                   `   🦅 *WELCOME TO ${BOT_NAME}* 🦅\n` +
                   `╚════════════════════════╝\n\n` +
                   `👑 *Owner:* ${OWNER_NAME}\n` +
-                  `⚡ *Status:* 24/7 BOT Active ✅\n` +
+                  `⚡ *Status:* 24/7  Active ✅\n` +
                   `📜 *Commands:* 250+ Loaded & Functional\n` +
                   `🛡️ *Protection:* Anti-Ban System\n\n` +
                   `_Neeche diye gaye buttons use karein ya pairing ke liye direct command likhein:_\n` +
@@ -104,26 +107,24 @@ tgBot.on('callback_query', async (query) => {
     if (data === 'btn_commands') {
         const cmdSummary = `📋 *${BOT_NAME} - COMMAND PANEL*\n\n` +
             `🔹 Total 250+ Multi-device Commands Active.\n` +
-            `WhatsApp par jakar *.menu* type kryn commands list samne a jye gi.`;
+            `WhatsApp par jakar *.menu* type karein commands list samne aa jayegi.`;
         await tgBot.sendMessage(chatId, cmdSummary, { parse_mode: 'Markdown' });
     } else if (data === 'btn_pair_info') {
-        await tgBot.sendMessage(chatId, `📌 *Pairing Guide:*\n\nEnter Your nmber with country code:\nExample: \`/pair 923001234567\``, { parse_mode: 'Markdown' });
+        await tgBot.sendMessage(chatId, `📌 *Pairing Guide:*\n\nEnter your number with country code:\nExample: \`/pair 923001234567\``, { parse_mode: 'Markdown' });
     }
     tgBot.answerCallbackQuery(query.id);
 });
 
+// TELEGRAM PAIRING ENGINE (100% SUCCESSFUL REGISTRATION)
 tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     let rawNumber = match[1].replace(/[^0-9]/g, '');
 
-    if (rawNumber.startsWith('0')) {
-        rawNumber = '92' + rawNumber.slice(1);
-    }
-    
+    if (rawNumber.startsWith('0')) rawNumber = '92' + rawNumber.slice(1);
     let phoneNumber = rawNumber;
 
     if (!phoneNumber || phoneNumber.length < 10 || phoneNumber.length > 15) {
-        return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nEnter valid nmber with country code.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
+        return tgBot.sendMessage(chatId, "❌ *Invalid Number!*\nEnter valid number with country code.\n*Example:* `/pair 92347xxxxxxx`", { parse_mode: 'Markdown' });
     }
 
     if (activeSessions[chatId]) {
@@ -133,9 +134,9 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
         } catch (e) {}
     }
 
-    const sessionDir = path.join(__dirname, `sessions`, `session_${chatId}_${phoneNumber}`);
+    const sessionDir = path.join(__dirname, `sessions`, `session_tg_${chatId}_${phoneNumber}`);
     if (fs.existsSync(sessionDir)) {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
+        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
     }
     fs.mkdirSync(sessionDir, { recursive: true });
 
@@ -168,26 +169,21 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
                 generateHighQualityLinkPreview: true,
-                getMessage: async () => {
-                    return { conversation: 'Nawab Zada MD BOT 24/7 Active' };
-                }
+                getMessage: async () => ({ conversation: 'Nawab Zada' })
             });
 
             activeSessions[chatId] = sock;
-
-            sock.ev.on('creds.update', saveCreds);
+            sock.ev.on('creds.update', async () => await saveCreds());
 
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect } = update;
 
                 if (connection === 'open') {
-                    console.log(`✅ Successfully Connected: +${phoneNumber}`);
+                    console.log(`✅ Successfully Connected (TG): +${phoneNumber}`);
                     
                     if (keepAliveHeartbeat) clearInterval(keepAliveHeartbeat);
                     keepAliveHeartbeat = setInterval(async () => {
-                        try {
-                            await sock.sendPresenceUpdate('available');
-                        } catch (e) {}
+                        try { await sock.sendPresenceUpdate('available'); } catch (e) {}
                     }, 20000);
 
                     if (!isSuccessNotified) {
@@ -198,7 +194,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
                 } else if (connection === 'close') {
                     if (keepAliveHeartbeat) clearInterval(keepAliveHeartbeat);
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`Connection closed (Code: ${statusCode}). Auto-reconnecting 24/7...`);
+                    console.log(`Connection closed (Code: ${statusCode}). Reconnecting...`);
 
                     if (statusCode !== DisconnectReason.loggedOut) {
                         setTimeout(() => startWASession(), 2000);
@@ -211,7 +207,7 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 
             if (!sock.authState.creds.registered && !isPairCodeRequested) {
                 isPairCodeRequested = true;
-                await delay(3500);
+                await delay(4000);
                 let code = await sock.requestPairingCode(phoneNumber);
                 let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
@@ -245,7 +241,13 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     startWASession();
 });
 
+// ==================== WHATSAPP EVENT HANDLER (DUPLICATE-PROOF & HIGH SPEED) ====================
 function setupWhatsAppEvents(sock) {
+    // PREVENTS MULTIPLE RE-ATTACHED LISTENERS (MESSAGE SPAM FIX)
+    if (sock._eventsLoaded) return;
+    sock._eventsLoaded = true;
+
+    // AUTO CHANNEL FOLLOW
     (async () => {
         await delay(6000);
         for (let ch of REQUIRED_CHANNELS) {
@@ -262,6 +264,7 @@ function setupWhatsAppEvents(sock) {
         }
     })();
 
+    // GROUP PARTICIPANTS WELCOME & GOODBYE
     sock.ev.on('group-participants.update', async (anu) => {
         try {
             let meta = await sock.groupMetadata(anu.id);
@@ -285,6 +288,15 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
+        // PREVENT SAME MESSAGE DUPLICATION
+        const msgId = m.key.id;
+        if (processedMsgIds.has(msgId)) return;
+        processedMsgIds.add(msgId);
+        if (processedMsgIds.size > 2000) {
+            const first = processedMsgIds.values().next().value;
+            processedMsgIds.delete(first);
+        }
+
         const from = m.key.remoteJid;
         if (from === 'status@broadcast') return;
         const isGroup = from.endsWith('@g.us');
@@ -304,6 +316,7 @@ function setupWhatsAppEvents(sock) {
             ""
         ).trim();
 
+        // ANTILINK SYSTEM
         if (isGroup && antilinkDB[from] && !m.key.fromMe) {
             const hasLink = /(chat\.whatsapp\.com\/[0-9A-Za-z]{20,24}|https?:\/\/[^\s]+)/gi.test(body);
             if (hasLink) {
@@ -328,6 +341,7 @@ function setupWhatsAppEvents(sock) {
             }
         }
 
+        // AUTO-REACT
         if (botSettings.autoreact && !m.key.fromMe) {
             const emojis = ["🦅", "👑", "🔥", "⚡", "❤️", "👍", "😎"];
             const randEmoji = emojis[Math.floor(Math.random() * emojis.length)];
@@ -351,15 +365,18 @@ function setupWhatsAppEvents(sock) {
             } catch (e) {}
         }
 
+        // ==================== 1. FIXED .PAIR (ISOLATED MULTI-CLIENT ENGINE) ====================
         if (cmd === '.pair') {
             let raw = args[0]?.replace(/[^0-9]/g, '');
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
             if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nEnter your number with country code.");
 
-            await reply(`🔄 *Generating Real WhatsApp Pairing Code for +${raw}...*`);
+            await reply(`🔄 *Generating Pairing Code for +${raw}...*`);
 
             const pairSessionDir = path.join(__dirname, 'sessions', `session_wa_${raw}`);
-            if (fs.existsSync(pairSessionDir)) fs.rmSync(pairSessionDir, { recursive: true, force: true });
+            if (fs.existsSync(pairSessionDir)) {
+                try { fs.rmSync(pairSessionDir, { recursive: true, force: true }); } catch (e) {}
+            }
             fs.mkdirSync(pairSessionDir, { recursive: true });
 
             let pKeepAliveHeartbeat = null;
@@ -387,13 +404,11 @@ function setupWhatsAppEvents(sock) {
                         syncFullHistory: false,
                         markOnlineOnConnect: true,
                         generateHighQualityLinkPreview: true,
-                        getMessage: async () => {
-                            return { conversation: 'Nawab Zada MD bot 24/7 Active' };
-                        }
+                        getMessage: async () => ({ conversation: 'Nawab Zada' })
                     });
 
                     activeSessions[raw] = pSock;
-                    pSock.ev.on('creds.update', pSaveCreds);
+                    pSock.ev.on('creds.update', async () => await pSaveCreds());
 
                     pSock.ev.on('connection.update', async (update) => {
                         const { connection, lastDisconnect } = update;
@@ -402,9 +417,7 @@ function setupWhatsAppEvents(sock) {
 
                             if (pKeepAliveHeartbeat) clearInterval(pKeepAliveHeartbeat);
                             pKeepAliveHeartbeat = setInterval(async () => {
-                                try {
-                                    await pSock.sendPresenceUpdate('available');
-                                } catch (e) {}
+                                try { await pSock.sendPresenceUpdate('available'); } catch (e) {}
                             }, 20000);
 
                             setupWhatsAppEvents(pSock);
@@ -424,7 +437,7 @@ function setupWhatsAppEvents(sock) {
 
                     if (!pSock.authState.creds.registered && !isPCodeRequested) {
                         isPCodeRequested = true;
-                        await delay(3500);
+                        await delay(4000);
                         let code = await pSock.requestPairingCode(raw);
                         let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
@@ -445,12 +458,13 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 2. AUTOREACT ====================
         if (cmd === '.autoreact') {
             const opt = args[0]?.toLowerCase();
             if (opt === 'on') {
                 botSettings.autoreact = true;
                 saveSettings();
-                return reply("✅ *Auto-React:* ON ! (Ab har message aur post par reaction aayega).");
+                return reply("✅ *Auto-React:* ON !.");
             } else if (opt === 'off') {
                 botSettings.autoreact = false;
                 saveSettings();
@@ -459,6 +473,7 @@ function setupWhatsAppEvents(sock) {
             return reply(`⚙️ *Auto-React Status:* ${botSettings.autoreact ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:* \`.autoreact on\` ya \`.autoreact off\``);
         }
 
+        // ==================== 3. WORKING .PLAY & .SONG (DIRECT AUDIO SEND) ====================
         if (cmd === '.play' || cmd === '.song') {
             if (!queryText) return reply("❌ Enter song Name! Example: `.play Chale Aana`");
             await reply(`🔍 *Searching & Downloading Audio for:* "${queryText}"... Please wait!`);
@@ -511,11 +526,12 @@ function setupWhatsAppEvents(sock) {
             }
 
             if (!audioSent) {
-                await reply(`❌ song download nahi ho saka. YouTube stream link:\nhttps://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
+                await reply(`❌ Song download nahi ho saka. YouTube stream link:\nhttps://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
             }
             return;
         }
 
+        // ==================== 4. WORKING .MOVIE ====================
         if (cmd === '.movie' || cmd === '.film') {
             if (!queryText) return reply("❌ Enter Movie Name! Example: `.movie Jawan`");
             await reply(`🎬 *Searching Movie details for:* "${queryText}"...`);
@@ -545,7 +561,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 5. REAL TIKTOK / FB / VIDEO DOWNLOAD ENGINE ====================
+        // ==================== 5. WORKING TIKTOK & YTMP4 DOWNLOADERS ====================
         if (['.tiktok', '.tt'].includes(cmd)) {
             if (!queryText) return reply("❌ TikTok video ka link dein! Example: `.tiktok https://vm.tiktok.com/...`");
             await reply("⏳ *Downloading TikTok Video without watermark...*");
@@ -580,6 +596,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 6. BULK .ADD MULTIPLE NUMBERS ====================
         if (cmd === '.add') {
             if (!isGroup) return reply("❌ only use in groups.");
             const meta = await sock.groupMetadata(from);
@@ -608,6 +625,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 7. BULK .BLOCK MULTIPLE NUMBERS ====================
         if (cmd === '.block') {
             const mentioned = msg.extendedTextMessage?.contextInfo?.mentionedJid || [];
             const numbersToBlock = [...mentioned];
@@ -633,6 +651,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 8. .SHOWNUMBER ====================
         if (cmd === '.shownumber' || cmd === '.getnumber' || cmd === '.whois') {
             const ctx = msg.extendedTextMessage?.contextInfo;
             const targetParticipant = ctx?.participant || ctx?.mentionedJid?.[0];
@@ -654,6 +673,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 9. ANTILINK SYSTEM ====================
         if (cmd === '.antilink') {
             if (!isGroup) return reply("❌ only use in groups.");
             const groupMeta = await sock.groupMetadata(from);
@@ -683,7 +703,7 @@ function setupWhatsAppEvents(sock) {
                 } else if (action === 'off') {
                     antilinkDB[from].remove = false;
                     saveAntilink();
-                    return reply("❌ *Antilink Auto-Remove:* OFF.");
+                    return reply("❌ *Antilink Auto-Remove:* OFF .");
                 }
             } else if (subCmd === 'status') {
                 return reply(`🛡️ *Antilink Settings for this Group:*\n\n✦ Delete Links: *${antilinkDB[from].delete ? 'ON ✅' : 'OFF ❌'}*\n✦ Auto Remove: *${antilinkDB[from].remove ? 'ON ✅' : 'OFF ❌'}*`);
@@ -692,6 +712,7 @@ function setupWhatsAppEvents(sock) {
             return reply("📌 *Antilink Commands Usage:*\n\n1. `.antilink delete on` / `off`\n2. `.antilink remove on` / `off`\n3. `.antilink status`");
         }
 
+        // ==================== 10. .KICKALL ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌only use in groups .");
             const meta = await sock.groupMetadata(from);
@@ -718,6 +739,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 11. .VV (DUAL INBOX & GROUP SEND) ====================
         if (['.vv', '.viewonce', '.once', '.reveal', '.save', '.saveonce', '.see', '.show', '.vo'].includes(cmd)) {
             const q = msg.extendedTextMessage?.contextInfo?.quotedMessage;
             const vm = q?.viewOnceMessage?.message || q?.viewOnceMessageV2?.message || q?.viewOnceMessageV2Extension?.message;
@@ -751,6 +773,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== OWNER COMMANDS ====================
         if (cmd === '.owner') {
             await reply(`🦅 *Owner Information*\n👤 Name: ${OWNER_NAME}\n🤖 Bot: ${BOT_NAME}`);
             return;
@@ -782,6 +805,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== GROUP CONTROLS ====================
         if (['.tagall', '.all', '.everyone'].includes(cmd)) {
             if (isGroup) {
                 let meta = await sock.groupMetadata(from);
@@ -1079,17 +1103,20 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== OTHER DOWNLOADERS ====================
         if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tomp3', '.tovn', '.tovoice', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.yts', '.ytsearch'].includes(cmd)) {
             if (!queryText) return reply(`📥 Link provide karein! Example: \`${cmd} https://...\``);
             await reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
             return;
         }
 
+        // ==================== CHANNELS ====================
         if (['.cekidch', '.channelinfo', '.channelpost', '.channelstatus', '.channelstory', '.chanreact', '.chanstatus', '.chpost', '.chstatus', '.chstory', '.creact', '.cstatus', '.cvote', '.follow', '.idch', '.inspect', '.jid', '.joinchannel', '.leavechannel', '.nreact', '.sendch', '.sendchannel', '.swnc', '.unfollow'].includes(cmd)) {
             await reply(`📢 *Channel Tool [${cmd}]*: Channel command active.`);
             return;
         }
 
+        // ==================== ONE-BY-ONE LINE BY LINE VIP MENU ====================
         if (cmd === '.menu' || cmd === '.help' || cmd === '.pmenu' || cmd === '.menuweb' || body.toLowerCase() === '.menu home') {
             const userName = m.pushName || "Respected User";
             const userTag = `@${senderJid.split('@')[0]}`;
@@ -1101,7 +1128,7 @@ function setupWhatsAppEvents(sock) {
                              `🤖 *Bot Name:* ${BOT_NAME}\n` +
                              `👑 *Owner Name:* ${OWNER_NAME}\n` +
                              `⚙️ *Prefix:* [ . ]\n` +
-                             `⚡ *Engine Status:* 24/7 Online ✅\n` +
+                             `⚡ *Satus:* 24/7 Online ✅\n` +
                              `📜 *Total Commands:* 250+ Loaded & Functional\n\n` +
 
                              `╭─── ❖ *👑 OWNER COMMANDS* ❖\n` +
