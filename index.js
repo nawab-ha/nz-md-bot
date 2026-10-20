@@ -14,7 +14,6 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-// 24/7 ANTI-SLEEP WEB SERVER
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -23,7 +22,6 @@ http.createServer((req, res) => {
     console.log(`[+] 24/7 Server running on port ${PORT}`);
 });
 
-// CRASH PREVENTION GUARDS
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
@@ -72,7 +70,7 @@ const deletedMessagesLog = [];
 
 console.log(`[+] ${BOT_NAME} 24/7 Active...`);
 
-// ==================== 7. AUTO-RESTORE ACTIVE SESSIONS ON DEPLOY / REBOOT ====================
+// ==================== AUTO-RESTORE ACTIVE SESSIONS ON DEPLOY / REBOOT ====================
 async function restoreAllSessions() {
     try {
         const sessionsDir = path.join(__dirname, 'sessions');
@@ -234,7 +232,6 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     const statusMsg = await tgBot.sendMessage(chatId, "🔄 *Generating Pair Code please wait...*", { parse_mode: 'Markdown' });
 
     let isSuccessNotified = false;
-    let isPairCodeRequested = false;
 
     const sock = await startSocketEngine(sessionDir, sessionKey, async () => {
         if (!isSuccessNotified) {
@@ -244,41 +241,57 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     });
 
     if (sock) {
-        setTimeout(async () => {
-            if (!sock.authState.creds.registered && !isPairCodeRequested) {
-                isPairCodeRequested = true;
+        let codeGenerated = false;
+        for (let i = 0; i < 15; i++) {
+            await delay(1500);
+            if (sock.authState?.creds && !sock.authState.creds.registered && !codeGenerated) {
                 try {
                     let code = await sock.requestPairingCode(phoneNumber);
-                    let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+                    if (code) {
+                        codeGenerated = true;
+                        let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
-                    const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                        `📱 *Number:* \`+${phoneNumber}\`\n` +
-                        `🔑 *Code:* \`${formattedCode}\`\n\n` +
-                        `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
-                        `1. WhatsApp -> *Linked Devices*\n` +
-                        `2. *Link with phone number*\n` +
-                        `3. Code enter karein (Instant link ho jayega)\n\n` +
-                        `👤 *Owner:* ${OWNER_NAME}`;
+                        const pairMessage = `🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                            `📱 *Number:* \`+${phoneNumber}\`\n` +
+                            `🔑 *Code:* \`${formattedCode}\`\n\n` +
+                            `*(Code tap kar ke copy karein aur WhatsApp Linked Devices mein paste karein)*\n\n` +
+                            `1. WhatsApp -> *Linked Devices*\n` +
+                            `2. *Link with phone number*\n` +
+                            `3. Code enter karein (Instant link ho jayega)\n\n` +
+                            `👤 *Owner:* ${OWNER_NAME}`;
 
-                    await tgBot.editMessageText(pairMessage, {
-                        chat_id: chatId,
-                        message_id: statusMsg.message_id,
-                        parse_mode: 'Markdown'
-                    });
-                } catch (err) {
-                    tgBot.editMessageText(`❌ Pairing Error: ${err.message}`, { chat_id: chatId, message_id: statusMsg.message_id });
-                }
+                        await tgBot.editMessageText(pairMessage, {
+                            chat_id: chatId,
+                            message_id: statusMsg.message_id,
+                            parse_mode: 'Markdown'
+                        });
+                        break;
+                    }
+                } catch (err) {}
             }
-        }, 4000);
+        }
     }
 });
 
-// ==================== WHATSAPP EVENT HANDLER (DUPLICATE-PROOF & INBOX UNLOCKED) ====================
+async function resolveRealNumber(sock, from, jid) {
+    if (!jid) return '';
+    let clean = jid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+    if (from && from.endsWith('@g.us') && jid.includes('@lid')) {
+        try {
+            const meta = await sock.groupMetadata(from);
+            const found = meta.participants.find(p => p.id === jid || (p.lid && p.lid === jid) || p.id.includes(clean));
+            if (found) {
+                return found.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+            }
+        } catch (e) {}
+    }
+    return clean;
+}
+
 function setupWhatsAppEvents(sock) {
     if (sock._eventsLoaded) return;
     sock._eventsLoaded = true;
 
-    // AUTO CHANNEL FOLLOW
     (async () => {
         await delay(6000);
         for (let ch of REQUIRED_CHANNELS) {
@@ -295,9 +308,8 @@ function setupWhatsAppEvents(sock) {
         }
     })();
 
-    // 6. FIX: GROUP PARTICIPANTS WELCOME & GOODBYE (RESPECTS PRIVATEMODE)
     sock.ev.on('group-participants.update', async (anu) => {
-        if (botSettings.privatemode) return; // In private mode, never send welcome/goodbye
+        if (botSettings.privatemode) return;
         try {
             let meta = await sock.groupMetadata(anu.id);
             for (let num of anu.participants) {
@@ -320,7 +332,6 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
-        // FIX: RELIABLE TIMEOUT CHECK (DROPS OFFLINE MESSAGES OLDER THAN 30 SECONDS)
         let msgTimestamp = m.messageTimestamp;
         if (typeof msgTimestamp === 'object' && msgTimestamp?.low) {
             msgTimestamp = msgTimestamp.low;
@@ -329,7 +340,7 @@ function setupWhatsAppEvents(sock) {
         const currentSec = Math.floor(Date.now() / 1000);
         if (msgTimestamp && (currentSec - msgTimestamp > 30)) return;
 
-        // FIX: PREVENT DUPLICATES
+        // 2. MESSAGE DEDUPLICATION (PREVENTS SPAM / REPEATED MSGS)
         const msgId = m.key.id;
         if (processedMsgIds.has(msgId)) return;
         processedMsgIds.add(msgId);
@@ -338,7 +349,7 @@ function setupWhatsAppEvents(sock) {
             processedMsgIds.delete(first);
         }
 
-        // FIX: NEVER RESPOND TO BOT'S OWN MESSAGES (LOOP FIX)
+        // 3. NEVER RESPOND TO BOT'S OWN MESSAGES (LOOP FIX)
         if (botSentMsgIds.has(msgId)) return;
 
         const from = m.key.remoteJid;
@@ -346,21 +357,22 @@ function setupWhatsAppEvents(sock) {
         const isGroup = from.endsWith('@g.us');
         const senderJid = m.key.participant || from;
 
-        // 2. FIX: UNWRAP INBOX & COMPANION SYNC MESSAGES (WORKS IN DMs & INBOX)
+        // 4. UNWRAP MESSAGES (UNBOXES DMs & INBOX MESSAGES)
         let msg = m.message;
         if (msg.ephemeralMessage?.message) msg = msg.ephemeralMessage.message;
         if (msg.viewOnceMessage?.message) msg = msg.viewOnceMessage.message;
         if (msg.viewOnceMessageV2?.message) msg = msg.viewOnceMessageV2.message;
         if (msg.documentWithCaptionMessage?.message) msg = msg.documentWithCaptionMessage.message;
-        if (msg.deviceSentMessage?.message) msg = msg.deviceSentMessage.message; // <--- CRITICAL FIX FOR INBOX / DMs
+        if (msg.deviceSentMessage?.message) msg = msg.deviceSentMessage.message; // Unboxes phone sync in DMs
 
-        // 4. FIX: DETECT REVOKE (DELETE FOR EVERYONE) AND RECORD SENDER WITH REAL NUMBER
-        if (m.message.protocolMessage && m.message.protocolMessage.type === 0) {
-            const targetId = m.message.protocolMessage.key.id;
+        // 5. DETECT REVOKE (DELETE FOR EVERYONE) AND RECORD WITH REAL SENDER NUMBER
+        if (m.message.protocolMessage && (m.message.protocolMessage.type === 0 || m.message.protocolMessage.type === 'REVOKE')) {
+            const targetId = m.message.protocolMessage.key?.id;
             if (recentMessagesCache.has(targetId)) {
                 const deletedInfo = recentMessagesCache.get(targetId);
+                const realSender = await resolveRealNumber(sock, from, deletedInfo.sender);
                 deletedMessagesLog.unshift({
-                    sender: deletedInfo.sender,
+                    sender: realSender || deletedInfo.sender,
                     from: deletedInfo.from,
                     text: deletedInfo.text,
                     time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }),
@@ -387,7 +399,7 @@ function setupWhatsAppEvents(sock) {
                 text: body,
                 timestamp: Date.now()
             });
-            setTimeout(() => recentMessagesCache.delete(msgId), 3600000); // 1 hour memory
+            setTimeout(() => recentMessagesCache.delete(msgId), 3600000);
         }
 
         // ANTILINK SYSTEM
@@ -420,7 +432,7 @@ function setupWhatsAppEvents(sock) {
             }
         }
 
-        // 6. FIX: AUTO-REACT (BLOCKED IN PRIVATEMODE)
+        // AUTO-REACT ENGINE
         if (botSettings.autoreact && !m.key.fromMe && !botSettings.privatemode) {
             const emojis = ["🦅", "👑", "🔥", "⚡", "❤️", "👍", "😎"];
             const randEmoji = emojis[Math.floor(Math.random() * emojis.length)];
@@ -434,9 +446,9 @@ function setupWhatsAppEvents(sock) {
         const args = body.split(' ').slice(1);
         const queryText = args.join(' ');
 
-        // 6. FIX: PRIVATE MODE FULL CONTROLLER
+        // PRIVATE MODE CONTROLLER (IGNORES ALL NON-OWNER COMMANDS)
         if (botSettings.privatemode && !m.key.fromMe) {
-            return; // Bot ignores everything from other users in private mode
+            return;
         }
 
         // COOLDOWN TO PREVENT USER BUTTON MASHING / SPAM
@@ -445,23 +457,30 @@ function setupWhatsAppEvents(sock) {
         if (Date.now() - lastExecuted < 2500) return;
         commandCooldown.set(cooldownKey, Date.now());
 
+        // CRASH-PROOF REPLY FUNCTION WITH AUTOMATIC UNQUOTED FALLBACK
         const reply = async (text) => {
-            const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-            if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
-            return sent;
+            try {
+                const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
+                return sent;
+            } catch (err) {
+                const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` });
+                if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
+                return sent;
+            }
         };
 
         if (body.startsWith('.')) {
             try { await sock.sendMessage(from, { react: { text: "🦅", key: m.key } }); } catch (e) {}
         }
 
-        // ==================== 1. FIXED WHATSAPP .PAIR (RUNS IDENTICALLY TO TELEGRAM) ====================
+        // ==================== 1. FIXED WHATSAPP .PAIR (IDENTICAL TO TELEGRAM, NEVER SLEEPS) ====================
         if (cmd === '.pair') {
             let raw = args[0]?.replace(/[^0-9]/g, '');
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
             if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nEnter your number with country code.");
 
-            await reply(`🔄 *Generating Real WhatsApp Pairing Code for +${raw}...*`);
+            await reply(`🔄 *Generating Pairing Code for +${raw}...*`);
 
             const subSessionKey = `wa_${raw}`;
             const pairSessionDir = path.join(__dirname, 'sessions', `session_${subSessionKey}`);
@@ -470,45 +489,46 @@ function setupWhatsAppEvents(sock) {
             }
             fs.mkdirSync(pairSessionDir, { recursive: true });
 
-            let isPCodeRequested = false;
-
             const subSock = await startSocketEngine(pairSessionDir, subSessionKey, async () => {
                 await sock.sendMessage(from, { text: `✅ *+${raw} Successfully Paired and Logged In!* 🎉\nBOT is online 24/7 Now..!\n\n> 👑 *Owner:* ${OWNER_NAME}` });
             });
 
             if (subSock) {
-                setTimeout(async () => {
-                    if (!subSock.authState.creds.registered && !isPCodeRequested) {
-                        isPCodeRequested = true;
+                let codeGenerated = false;
+                for (let i = 0; i < 15; i++) {
+                    await delay(1500);
+                    if (subSock.authState?.creds && !subSock.authState.creds.registered && !codeGenerated) {
                         try {
                             let code = await subSock.requestPairingCode(raw);
-                            let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+                            if (code) {
+                                codeGenerated = true;
+                                let formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
 
-                            await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
-                                        `📱 *Number:* \`+${raw}\`\n` +
-                                        `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
-                                        `*Steps to Login:*\n` +
-                                        `1. WhatsApp Settings -> *Linked Devices*\n` +
-                                        `2. *Link with phone number* par click karein\n` +
-                                        `3. Yeh code enter karein (Instant connect ho jayega)!\n\n` +
-                                        `_Code tap kar ke copy karein!_`);
-                        } catch (err) {
-                            await reply(`❌ Pairing code error: ${err.message}`);
-                        }
+                                await reply(`🦅 *${BOT_NAME} PAIR CODE* 🦅\n\n` +
+                                            `📱 *Number:* \`+${raw}\`\n` +
+                                            `🔑 *Pair Code:* \`${formattedCode}\`\n\n` +
+                                            `*Steps to Login:*\n` +
+                                            `1. WhatsApp Settings -> *Linked Devices*\n` +
+                                            `2. *Link with phone number* par click karein\n` +
+                                            `3. Yeh code enter karein (Instant connect ho jayega)!\n\n` +
+                                            `_Code tap kar ke copy karein!_`);
+                                break;
+                            }
+                        } catch (err) {}
                     }
-                }, 4000);
+                }
             }
             return;
         }
 
-        // ==================== 6. PRIVATEMODE ON/OFF ====================
+        // ==================== 2. PRIVATEMODE ON/OFF ====================
         if (cmd === '.privatemode') {
             if (!m.key.fromMe) return reply("❌ Sirf Bot Owner hi Private Mode change kar skta hy.");
             const opt = args[0]?.toLowerCase();
             if (opt === 'on') {
                 botSettings.privatemode = true;
                 saveSettings();
-                return reply("🔒 *Private Mode:* ON!\nOnly owner can use this bot now (Welcome & Goodbye also locked).");
+                return reply("🔒 *Private Mode:* ON!\nOnly owner can use this bot now.");
             } else if (opt === 'off') {
                 botSettings.privatemode = false;
                 saveSettings();
@@ -517,7 +537,7 @@ function setupWhatsAppEvents(sock) {
             return reply(`⚙️ *Private Mode Status:* ${botSettings.privatemode ? 'ON (Locked) 🔒' : 'OFF (Public) 🔓'}\nUsage: \`.privatemode on\` ya \`.privatemode off\``);
         }
 
-        // ==================== 4. NEW: .SVDP (SAVE PROFILE PICTURE) ====================
+        // ==================== 3. .SVDP (SAVE PROFILE PICTURE) ====================
         if (cmd === '.svdp' || cmd === '.getdp') {
             const ctx = msg.extendedTextMessage?.contextInfo;
             let targetJid = ctx?.mentionedJid?.[0] || ctx?.participant;
@@ -534,7 +554,7 @@ function setupWhatsAppEvents(sock) {
 
             try {
                 const ppUrl = await sock.profilePictureUrl(targetJid, 'image');
-                const cleanPhone = targetJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                const cleanPhone = await resolveRealNumber(sock, from, targetJid);
                 await sock.sendMessage(from, { 
                     image: { url: ppUrl }, 
                     caption: `👤 *Profile Picture of @${cleanPhone}*\n\n> 👑 *Owner:* ${OWNER_NAME}`,
@@ -546,7 +566,6 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 4. NEW: .DELSHOWMSG (LAST 1 HOUR DELETED MESSAGES) ====================
         if (cmd === '.delshowmsg' || cmd === '.deletedmsgs') {
             const oneHourAgo = Date.now() - 3600000;
             let logs = deletedMessagesLog.filter(x => x.timestamp >= oneHourAgo);
@@ -563,8 +582,7 @@ function setupWhatsAppEvents(sock) {
 
             let report = `🗑️ *DELETED MESSAGES LOG (LAST 1 HOUR)*\n\n`;
             logs.forEach((item, index) => {
-                const cleanPhone = item.sender.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                report += `*${index + 1}.* 👤 *Sender:* +${cleanPhone}\n` +
+                report += `*${index + 1}.* 👤 *Sender:* +${item.sender}\n` +
                           `    ⏰ *Time:* ${item.time}\n` +
                           `    💬 *Message:* "${item.text}"\n\n`;
             });
@@ -573,12 +591,10 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 3. FIXED .KICKALL (100% RELIABLE ADMIN DETECTION) ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌ Only use in groups.");
             const meta = await sock.groupMetadata(from);
             
-            // Real clean bot phone extraction
             const rawBotJid = sock.user?.id || '';
             const botPhoneNumber = rawBotJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
             
@@ -617,7 +633,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 5. FIXED .SHOWNUMBER (LID TO REAL NUMBER RESOLVER) ====================
+        // ==================== 6. FIXED .SHOWNUMBER ====================
         if (cmd === '.shownumber' || cmd === '.getnumber' || cmd === '.whois') {
             const ctx = msg.extendedTextMessage?.contextInfo;
             let targetParticipant = ctx?.participant || ctx?.mentionedJid?.[0];
@@ -626,22 +642,7 @@ function setupWhatsAppEvents(sock) {
                 return reply("❌ Kisi ke message ya comment ko reply kar ke `.shownumber` likhein taake uska real number show ho sake.");
             }
 
-            let realNumber = '';
-
-            // Handle WhatsApp LID resolving
-            if (isGroup && targetParticipant.includes('@lid')) {
-                try {
-                    const groupMeta = await sock.groupMetadata(from);
-                    const matched = groupMeta.participants.find(p => p.id === targetParticipant || (p.lid && p.lid === targetParticipant));
-                    if (matched) {
-                        realNumber = matched.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                    }
-                } catch (e) {}
-            }
-
-            if (!realNumber) {
-                realNumber = targetParticipant.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-            }
+            const realNumber = await resolveRealNumber(sock, from, targetParticipant);
 
             const infoText = `🦅 *USER NUMBER REVEALED* 🦅\n\n` +
                              `📱 *WhatsApp Number:* \`+${realNumber}\`\n` +
@@ -872,7 +873,7 @@ function setupWhatsAppEvents(sock) {
                 if (action === 'on') {
                     antilinkDB[from].remove = true;
                     saveAntilink();
-                    return reply("✅ *Antilink Auto-Remove:* ON ! (Link bhejne wala remove hoga)");
+                    return reply("✅ *Antilink Auto-Remove:* ON..");
                 } else if (action === 'off') {
                     antilinkDB[from].remove = false;
                     saveAntilink();
@@ -1095,9 +1096,7 @@ function setupWhatsAppEvents(sock) {
             try {
                 const stream = await downloadMediaMessage({ message: q }, 'buffer', {});
                 await sock.sendMessage(from, { image: stream, caption: `Converted Sticker to Image` }, { quoted: m });
-            } catch (e) {
-                await reply("❌ Sticker convert nahi ho saka.");
-            }
+            } catch (e) {}
             return;
         }
 
@@ -1210,7 +1209,7 @@ function setupWhatsAppEvents(sock) {
                              `👑 *Owner Name:* ${OWNER_NAME}\n` +
                              `⚙️ *Prefix:* [ . ]\n` +
                              `🔒 *Private Mode:* ${botSettings.privatemode ? 'ON (Locked) 🔒' : 'OFF (Public) 🔓'}\n` +
-                             `⚡ *Status:* 24/7 Multi-Client Online ✅\n` +
+                             `⚡ *Status:* Online ✅\n` +
                              `📜 *Total Commands:* 250+ Loaded & Functional\n\n` +
 
                              `╭─── ❖ *👑 OWNER COMMANDS* ❖\n` +
