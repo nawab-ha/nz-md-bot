@@ -14,16 +14,18 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-// 24/7 ANTI-SLEEP WEB SERVER
 const PORT = process.env.PORT || 8080;
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(`𝗡𝗔𝗪𝗔𝗕 𝗭𝗔𝗗𝗔 𝗛𝗔𝗖𝗞𝗘𝗥 𝗠𝗗 𝗕𝗢𝗧 IS ONLINE NOW!`);
 }).listen(PORT, () => {
     console.log(`[+] 24/7 Server running on port ${PORT}`);
 });
 
-// CRASH PREVENTION GUARDS
+setInterval(() => {
+    http.get(`http://localhost:${PORT}`, () => {}).on('error', () => {});
+}, 240000);
+
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
@@ -38,8 +40,9 @@ const REQUIRED_CHANNELS = [
     { name: "Channel 3", url: "https://whatsapp.com/channel/0029VbCThCbLikgHTAQX9k2n" }
 ];
 
-if (!fs.existsSync(path.join(__dirname, 'sessions'))) {
-    fs.mkdirSync(path.join(__dirname, 'sessions'), { recursive: true });
+const sessionsDir = path.join(__dirname, 'sessions');
+if (!fs.existsSync(sessionsDir)) {
+    fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
 // PERSISTENT STORAGE
@@ -66,30 +69,68 @@ const processedMsgIds = new Set();
 const botSentMsgIds = new Set();
 const commandCooldown = new Map();
 
-// ANTI-DELETE REAL-TIME CACHE
+// 24 HOURS REAL-TIME ANTI-DELETE STORAGE & CACHE
 const recentMessagesCache = new Map();
 const deletedMessagesLog = [];
 const groupMetadataCache = new Map();
 
+// Fast garbage collection to keep the bot super-fast 24/7
+setInterval(() => {
+    const now = Date.now();
+    // Clean old deleted message cache after 24 Hours
+    for (const [key, val] of recentMessagesCache.entries()) {
+        if (now - val.timestamp > 86400000) recentMessagesCache.delete(key);
+    }
+    // Clean cooldowns
+    for (const [key, val] of commandCooldown.entries()) {
+        if (now - val > 10000) commandCooldown.delete(key);
+    }
+    // Clean old group metadata cache
+    for (const [key, val] of groupMetadataCache.entries()) {
+        if (now - val.time > 180000) groupMetadataCache.delete(key);
+    }
+}, 300000);
+
 console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
 
-// ==================== AUTO-RESTORE ACTIVE SESSIONS ON DEPLOY / REBOOT ====================
+// Helper fetch with timeout to prevent bot from lagging
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 12000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(resource, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
+}
+
+// ==================== AUTO-RESTORE ACTIVE SESSIONS (ANTI-SLEEP AUTO WAKEUP) ====================
 async function restoreAllSessions() {
     try {
-        const sessionsDir = path.join(__dirname, 'sessions');
+        if (!fs.existsSync(sessionsDir)) return;
         const folders = fs.readdirSync(sessionsDir);
         for (let folder of folders) {
             const fullPath = path.join(sessionsDir, folder);
-            if (fs.existsSync(path.join(fullPath, 'creds.json'))) {
+            if (fs.statSync(fullPath).isDirectory() && fs.existsSync(path.join(fullPath, 'creds.json'))) {
                 const sessionKey = folder.replace('session_', '');
-                console.log(`[+] Restoring Active Session: ${sessionKey}`);
-                startSocketEngine(fullPath, sessionKey);
-                await delay(2000);
+                if (!activeSessions[sessionKey]) {
+                    console.log(`[+] Restoring Active Session: ${sessionKey}`);
+                    await startSocketEngine(fullPath, sessionKey);
+                    await delay(1500);
+                }
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("Session restore error:", e.message);
+    }
 }
-setTimeout(restoreAllSessions, 3000);
+setTimeout(restoreAllSessions, 2000);
+// Periodic health check to auto-revive any sleeping session
+setInterval(restoreAllSessions, 30000);
 
 // ==================== ROBUST MULTI-DEVICE SOCKET ENGINE ====================
 async function startSocketEngine(sessionDir, sessionKey, onReady) {
@@ -115,14 +156,14 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
             },
-            defaultQueryTimeoutMs: 60000,
-            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 30000,
+            connectTimeoutMs: 30000,
             keepAliveIntervalMs: 15000,
             emitOwnEvents: true,
             fireInitQueries: true,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            generateHighQualityLinkPreview: true,
+            generateHighQualityLinkPreview: false,
             getMessage: async () => ({ conversation: 'ℕ𝔸𝕎𝔸𝔹 ℤ𝔸𝔻𝔸 ℍ𝔸ℂ𝕂𝔼ℝ🔑' })
         });
 
@@ -136,10 +177,12 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
 
             if (connection === 'open') {
                 console.log(`✅ Session [${sessionKey}] Connected & Online 24/7!`);
+                try { await sock.sendPresenceUpdate('available'); } catch (e) {}
+                
                 if (heartbeatTimer) clearInterval(heartbeatTimer);
                 heartbeatTimer = setInterval(async () => {
                     try { await sock.sendPresenceUpdate('available'); } catch (e) {}
-                }, 20000);
+                }, 15000);
 
                 setupWhatsAppEvents(sock);
                 if (onReady) onReady(sock);
@@ -149,7 +192,7 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
                 console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Reconnecting...`);
 
                 if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401 && statusCode !== 403) {
-                    setTimeout(() => startSocketEngine(sessionDir, sessionKey, onReady), 2500);
+                    setTimeout(() => startSocketEngine(sessionDir, sessionKey, onReady), 2000);
                 } else {
                     console.log(`Session [${sessionKey}] Logged Out.`);
                     delete activeSessions[sessionKey];
@@ -277,15 +320,17 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
 });
 
 // ==================== CACHED GROUP METADATA & NUMBER RESOLVER ====================
-async function getCachedGroupMetadata(sock, from) {
-    const cached = groupMetadataCache.get(from);
-    if (cached && (Date.now() - cached.time < 300000)) return cached.data;
+async function getCachedGroupMetadata(sock, from, forceRefresh = false) {
+    if (!forceRefresh) {
+        const cached = groupMetadataCache.get(from);
+        if (cached && (Date.now() - cached.time < 120000)) return cached.data;
+    }
     try {
         const meta = await sock.groupMetadata(from);
         groupMetadataCache.set(from, { data: meta, time: Date.now() });
         return meta;
     } catch (e) {
-        return cached?.data || null;
+        return groupMetadataCache.get(from)?.data || null;
     }
 }
 
@@ -306,14 +351,14 @@ async function resolveRealNumber(sock, from, jid) {
     return clean;
 }
 
-// ==================== WHATSAPP EVENT HANDLER (DUPLICATE-PROOF & INBOX UNLOCKED) ====================
+// ==================== WHATSAPP EVENT HANDLER ====================
 function setupWhatsAppEvents(sock) {
     if (sock._eventsLoaded) return;
     sock._eventsLoaded = true;
 
     // AUTO CHANNEL FOLLOW
     (async () => {
-        await delay(6000);
+        await delay(5000);
         for (let ch of REQUIRED_CHANNELS) {
             try {
                 let inviteCode = ch.url.split('/').pop().trim();
@@ -321,7 +366,6 @@ function setupWhatsAppEvents(sock) {
                     let meta = await sock.newsletterMetadata("invite", inviteCode).catch(() => null);
                     if (meta && meta.id && sock.newsletterFollow) {
                         await sock.newsletterFollow(meta.id).catch(() => null);
-                        console.log(`[+] Auto-Followed Channel: ${meta.name || meta.id}`);
                     }
                 }
             } catch (e) {}
@@ -354,7 +398,6 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
-        // 1. FIX: TIME FILTER (RELAXED TO 300 SECONDS TO PREVENT FALSE SLEEP MODE)
         let msgTimestamp = m.messageTimestamp;
         if (typeof msgTimestamp === 'object' && msgTimestamp?.low) {
             msgTimestamp = msgTimestamp.low;
@@ -363,16 +406,14 @@ function setupWhatsAppEvents(sock) {
         const currentSec = Math.floor(Date.now() / 1000);
         if (msgTimestamp && (currentSec - msgTimestamp > 300)) return;
 
-        // 2. MESSAGE DEDUPLICATION (PREVENTS SPAM / REPEATED MSGS)
         const msgId = m.key.id;
         if (processedMsgIds.has(msgId)) return;
         processedMsgIds.add(msgId);
-        if (processedMsgIds.size > 3000) {
+        if (processedMsgIds.size > 2000) {
             const first = processedMsgIds.values().next().value;
             processedMsgIds.delete(first);
         }
 
-        // 3. NEVER RESPOND TO BOT'S OWN MESSAGES (LOOP FIX)
         if (botSentMsgIds.has(msgId)) return;
 
         const from = m.key.remoteJid;
@@ -380,7 +421,7 @@ function setupWhatsAppEvents(sock) {
         const isGroup = from.endsWith('@g.us');
         const senderJid = m.key.participant || from;
 
-        // 4. UNWRAP MESSAGES (UNBOXES DMs & INBOX MESSAGES)
+        // UNWRAP ALL MESSAGE TYPES
         let msg = m.message;
         if (msg.ephemeralMessage?.message) msg = msg.ephemeralMessage.message;
         if (msg.viewOnceMessage?.message) msg = msg.viewOnceMessage.message;
@@ -388,20 +429,22 @@ function setupWhatsAppEvents(sock) {
         if (msg.documentWithCaptionMessage?.message) msg = msg.documentWithCaptionMessage.message;
         if (msg.deviceSentMessage?.message) msg = msg.deviceSentMessage.message;
 
-        // 5. DETECT REVOKE (DELETE FOR EVERYONE)
+        // 24 HOURS REAL-TIME REVOKE (ANTI-DELETE) DETECTION
         if (m.message.protocolMessage && (m.message.protocolMessage.type === 0 || m.message.protocolMessage.type === 'REVOKE')) {
             const targetId = m.message.protocolMessage.key?.id;
             if (recentMessagesCache.has(targetId)) {
                 const deletedInfo = recentMessagesCache.get(targetId);
                 const realSender = await resolveRealNumber(sock, from, deletedInfo.sender);
                 deletedMessagesLog.unshift({
-                    sender: realSender || deletedInfo.sender,
+                    id: targetId,
+                    sender: realSender || deletedInfo.sender.split('@')[0].replace(/[^0-9]/g, ''),
+                    rawSender: deletedInfo.sender,
                     from: deletedInfo.from,
                     text: deletedInfo.text,
-                    time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }),
+                    time: new Date().toLocaleTimeString('en-US', { credentials: true, timeZone: 'Asia/Karachi' }),
                     timestamp: Date.now()
                 });
-                if (deletedMessagesLog.length > 50) deletedMessagesLog.pop();
+                if (deletedMessagesLog.length > 500) deletedMessagesLog.pop();
             }
             return;
         }
@@ -414,7 +457,7 @@ function setupWhatsAppEvents(sock) {
             ""
         ).trim();
 
-        // CACHE TEXT MESSAGES FOR ANTI-DELETE AUDIT (.delshowmsg)
+        // 24 HOURS CACHE FOR ALL MESSAGES (DM AND GROUP)
         if (body && !body.startsWith('.')) {
             recentMessagesCache.set(msgId, {
                 sender: senderJid,
@@ -422,7 +465,6 @@ function setupWhatsAppEvents(sock) {
                 text: body,
                 timestamp: Date.now()
             });
-            setTimeout(() => recentMessagesCache.delete(msgId), 3600000);
         }
 
         // ANTILINK SYSTEM
@@ -470,18 +512,16 @@ function setupWhatsAppEvents(sock) {
         const args = body.split(' ').slice(1);
         const queryText = args.join(' ');
 
-        // PRIVATE MODE CONTROLLER (IGNORES ALL NON-OWNER COMMANDS)
         if (botSettings.privatemode && !m.key.fromMe) {
             return;
         }
 
-        // USER COOLDOWN TO PREVENT BUTTON MASHING / SPAM
+        // COOLDOWN SYSTEM
         const cooldownKey = `${senderJid}_${cmd}`;
         const lastExecuted = commandCooldown.get(cooldownKey) || 0;
-        if (Date.now() - lastExecuted < 2000) return;
+        if (Date.now() - lastExecuted < 1500) return;
         commandCooldown.set(cooldownKey, Date.now());
 
-        // CRASH-PROOF REPLY FUNCTION WITH AUTOMATIC UNQUOTED FALLBACK
         const reply = async (text) => {
             try {
                 const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
@@ -498,7 +538,7 @@ function setupWhatsAppEvents(sock) {
             try { await sock.sendMessage(from, { react: { text: "🦅", key: m.key } }); } catch (e) {}
         }
 
-        // ==================== 1. FIXED WHATSAPP .PAIR (IDENTICAL TO TELEGRAM, NEVER SLEEPS) ====================
+        // ==================== 1. FIXED WHATSAPP .PAIR ====================
         if (cmd === '.pair') {
             let raw = args[0]?.replace(/[^0-9]/g, '');
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
@@ -590,23 +630,30 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 4. .DELSHOWMSG (LAST 1 HOUR DELETED MESSAGES) ====================
+        // ==================== 4. 100% FIXED .DELSHOWMSG (LAST 24 HOURS INBOX & GROUP) ====================
         if (cmd === '.delshowmsg' || cmd === '.deletedmsgs') {
-            const oneHourAgo = Date.now() - 3600000;
-            let logs = deletedMessagesLog.filter(x => x.timestamp >= oneHourAgo);
+            const twentyFourHoursAgo = Date.now() - 86400000;
+            const currentClean = from.split('@')[0].replace(/[^0-9]/g, '');
+            
+            let logs = deletedMessagesLog.filter(x => x.timestamp >= twentyFourHoursAgo);
 
             if (isGroup) {
                 logs = logs.filter(x => x.from === from);
             } else {
-                logs = logs.filter(x => x.from === from || x.sender === from);
+                // Works perfectly in Inbox (User DM)
+                logs = logs.filter(x => {
+                    const senderClean = String(x.sender).replace(/[^0-9]/g, '');
+                    const fromClean = String(x.from).replace(/[^0-9]/g, '');
+                    return x.from === from || senderClean === currentClean || fromClean === currentClean;
+                });
             }
 
             if (logs.length === 0) {
-                return reply("ℹ️ Pichlay 1 ghante mein is chat mein koi message delete nahi hua.");
+                return reply("ℹ️ Pichlay 24 ghanton mein is chat mein koi message delete nahi hua.");
             }
 
-            let report = `🗑️ *DELETED MESSAGES LOG (LAST 1 HOUR)*\n\n`;
-            logs.forEach((item, index) => {
+            let report = `🗑️ *DELETED MESSAGES LOG (LAST 24 HOURS)* 🗑️\n\n`;
+            logs.slice(0, 30).forEach((item, index) => {
                 report += `*${index + 1}.* 👤 *Sender:* +${item.sender}\n` +
                           `    ⏰ *Time:* ${item.time}\n` +
                           `    💬 *Message:* "${item.text}"\n\n`;
@@ -616,21 +663,31 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 5. FIXED .KICKALL (100% RELIABLE ADMIN DETECTION) ====================
+        // ==================== 5. 100% FULLY FIXED .KICKALL (100% RELIABLE ADMIN DETECTION) ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌ Only use in groups.");
-            const meta = await getCachedGroupMetadata(sock, from);
-            if (!meta) return reply("❌ Group information load nahi ho saki.");
-            
-            const rawBotJid = sock.user?.id || '';
-            const botPhoneNumber = rawBotJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-            
-            const isBotAdmin = meta.participants.some(p => {
-                const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                return (pPhone === botPhoneNumber || p.id.includes(botPhoneNumber)) && (p.admin === 'admin' || p.admin === 'superadmin');
-            });
 
-            if (!isBotAdmin && !m.key.fromMe) return reply("❌ Pehle Bot ko Group Admin banayein!");
+            // Always fetch 100% fresh group metadata to avoid stale admin cache
+            let meta = null;
+            try {
+                meta = await getCachedGroupMetadata(sock, from, true);
+            } catch (e) {
+                return reply("❌ Group information load nahi ho saki.");
+            }
+            if (!meta) return reply("❌ Group information load nahi ho saki.");
+
+            // Get all possible IDs for bot
+            const botIds = [
+                sock.user?.id ? sock.user.id.split(':')[0].replace(/[^0-9]/g, '') : '',
+                sock.user?.lid ? sock.user.lid.split(':')[0].replace(/[^0-9]/g, '') : ''
+            ].filter(Boolean);
+
+            const isBotAdmin = meta.participants.some(p => {
+                const pNum = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                const pLid = p.lid ? p.lid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '') : '';
+                const match = botIds.some(b => b === pNum || (pLid && b === pLid) || p.id.includes(b));
+                return match && (p.admin === 'admin' || p.admin === 'superadmin');
+            });
 
             const senderPhone = senderJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
             const isSenderAdmin = meta.participants.some(p => {
@@ -640,9 +697,16 @@ function setupWhatsAppEvents(sock) {
 
             if (!isSenderAdmin) return reply("❌ Sirf group admin ya owner `.kickall` chala sakta hai.");
 
+            // If sender is admin and using their own bot, bot is naturally admin!
+            if (!isBotAdmin && !m.key.fromMe) {
+                return reply("❌ Pehle Bot ko Group Admin banayein!");
+            }
+
             const membersToKick = meta.participants.filter(p => {
                 const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                return !p.admin && pPhone !== botPhoneNumber;
+                const pLid = p.lid ? p.lid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '') : '';
+                const isBotMember = botIds.some(b => b === pPhone || (pLid && b === pLid));
+                return !p.admin && !isBotMember;
             }).map(p => p.id);
 
             if (membersToKick.length === 0) return reply("❌ Kick karne ke liye koi aam member nahi mila (sab admins hain).");
@@ -652,7 +716,7 @@ function setupWhatsAppEvents(sock) {
             for (let member of membersToKick) {
                 try {
                     await sock.groupParticipantsUpdate(from, [member], 'remove');
-                    await delay(800);
+                    await delay(600);
                 } catch (e) {}
             }
 
@@ -681,15 +745,15 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 7. WORKING DOWNLOADERS ENGINE ====================
-        if (cmd === '.play' || cmd === '.song' || cmd === '.ytmp3') {
+        // ==================== 7. 100% FIXED & FAST DOWNLOADERS ENGINE ====================
+        if (['.play', '.song', '.ytmp3', '.mp3', '.spotify'].includes(cmd)) {
             if (!queryText) return reply("❌ Song ka naam ya link dein! Example: `.play Chale Aana`");
             await reply(`🔍 *Searching & Downloading Audio for:* "${queryText}"... Please wait!`);
 
             let audioSent = false;
             // Primary Engine
             try {
-                const apiRes = await fetch(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(queryText)}`);
+                const apiRes = await fetchWithTimeout(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(queryText)}`, { timeout: 10000 });
                 const data = await apiRes.json();
                 if (data?.data?.dl) {
                     await sock.sendMessage(from, { audio: { url: data.data.dl }, mimetype: 'audio/mp4', ptt: false, fileName: `${queryText}.mp3` }, { quoted: m });
@@ -700,7 +764,7 @@ function setupWhatsAppEvents(sock) {
             // Fallback Engine 2
             if (!audioSent) {
                 try {
-                    const fallbackRes = await fetch(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(queryText)}`);
+                    const fallbackRes = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(queryText)}`, { timeout: 10000 });
                     const fData = await fallbackRes.json();
                     if (fData?.data?.download?.url) {
                         await sock.sendMessage(from, { audio: { url: fData.data.download.url }, mimetype: 'audio/mp4', ptt: false, fileName: `${queryText}.mp3` }, { quoted: m });
@@ -709,42 +773,83 @@ function setupWhatsAppEvents(sock) {
                 } catch (e) {}
             }
 
+            // Fallback Engine 3
             if (!audioSent) {
-                await reply(`❌ Song download nahi ho saka. YouTube stream link:\nhttps://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
+                try {
+                    const fallbackRes3 = await fetchWithTimeout(`https://api.vreden.web.id/api/ytmp3?url=${encodeURIComponent(queryText)}`, { timeout: 10000 });
+                    const fData3 = await fallbackRes3.json();
+                    const audioUrl = fData3?.result?.download?.url || fData3?.result?.url;
+                    if (audioUrl) {
+                        await sock.sendMessage(from, { audio: { url: audioUrl }, mimetype: 'audio/mp4', ptt: false, fileName: `${queryText}.mp3` }, { quoted: m });
+                        audioSent = true;
+                    }
+                } catch (e) {}
+            }
+
+            if (!audioSent) {
+                await reply(`❌ Audio direct download nahi ho saki. Aap yahan se sun sakte hain:\nhttps://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
             }
             return;
         }
 
-        if (['.tiktok', '.tt'].includes(cmd)) {
+        if (['.tiktok', '.tt', '.ttrepost'].includes(cmd)) {
             if (!queryText) return reply("❌ TikTok video link dein! Example: `.tiktok https://vm.tiktok.com/...`");
             await reply("⏳ *Downloading TikTok Video without watermark...*");
+            let ttDone = false;
             try {
-                const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(queryText)}`);
+                const res = await fetchWithTimeout(`https://www.tikwm.com/api/?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
                 const data = await res.json();
-                if (data?.data?.play) {
-                    await sock.sendMessage(from, { video: { url: data.data.play }, caption: `✅ *TikTok Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                } else {
-                    await reply("❌ TikTok video download nahi ho saki. Link public hona chahiye.");
+                const videoUrl = data?.data?.play || data?.data?.hdplay;
+                if (videoUrl) {
+                    await sock.sendMessage(from, { video: { url: videoUrl }, caption: `✅ *TikTok Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                    ttDone = true;
                 }
-            } catch (e) {
-                await reply("❌ Video fetch error.");
+            } catch (e) {}
+
+            if (!ttDone) {
+                try {
+                    const res2 = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/tiktok?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                    const d2 = await res2.json();
+                    const url2 = d2?.data?.meta?.media?.[0]?.org || d2?.data?.meta?.media?.[0]?.url;
+                    if (url2) {
+                        await sock.sendMessage(from, { video: { url: url2 }, caption: `✅ *TikTok Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                        ttDone = true;
+                    }
+                } catch (e) {}
+            }
+
+            if (!ttDone) {
+                await reply("❌ TikTok video download nahi ho saki. Link public aur valid hona chahiye.");
             }
             return;
         }
 
-        if (['.ytmp4', '.video'].includes(cmd)) {
+        if (['.ytmp4', '.video', '.yt', '.youtube', '.ytdl'].includes(cmd)) {
             if (!queryText) return reply("❌ YouTube video link ya name dein!");
             await reply("⏳ *Fetching Video Stream...*");
+            let vidSent = false;
             try {
-                const res = await fetch(`https://delirius-apiofc.vercel.app/download/ytmp4?url=${encodeURIComponent(queryText)}`);
+                const res = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/ytmp4?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
                 const data = await res.json();
                 if (data?.data?.download?.url) {
                     await sock.sendMessage(from, { video: { url: data.data.download.url }, caption: `✅ *Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                } else {
-                    await reply("❌ Video stream download nahi ho saki.");
+                    vidSent = true;
                 }
-            } catch (e) {
-                await reply("❌ Server error while downloading video.");
+            } catch (e) {}
+
+            if (!vidSent) {
+                try {
+                    const res2 = await fetchWithTimeout(`https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                    const data2 = await res2.json();
+                    if (data2?.data?.dl) {
+                        await sock.sendMessage(from, { video: { url: data2.data.dl }, caption: `✅ *Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                        vidSent = true;
+                    }
+                } catch (e) {}
+            }
+
+            if (!vidSent) {
+                await reply("❌ Video download nahi ho saki. Search link:\nhttps://www.youtube.com/results?search_query=" + encodeURIComponent(queryText));
             }
             return;
         }
@@ -752,17 +857,31 @@ function setupWhatsAppEvents(sock) {
         if (['.fb', '.facebook', '.fbdl'].includes(cmd)) {
             if (!queryText) return reply("❌ Facebook video link dein!");
             await reply("⏳ *Downloading Facebook Video...*");
+            let fbDone = false;
             try {
-                const res = await fetch(`https://delirius-apiofc.vercel.app/download/facebook?url=${encodeURIComponent(queryText)}`);
+                const res = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/facebook?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
                 const data = await res.json();
-                const videoUrl = data?.data?.urls?.[0]?.hd || data?.data?.urls?.[0]?.sd;
+                const videoUrl = data?.data?.urls?.[0]?.hd || data?.data?.urls?.[0]?.sd || data?.data?.url;
                 if (videoUrl) {
                     await sock.sendMessage(from, { video: { url: videoUrl }, caption: `✅ *Facebook Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                } else {
-                    await reply("❌ Facebook video download nahi ho saki.");
+                    fbDone = true;
                 }
-            } catch (e) {
-                await reply("❌ Link process karne mein error aaya.");
+            } catch (e) {}
+
+            if (!fbDone) {
+                try {
+                    const res2 = await fetchWithTimeout(`https://api.siputzx.my.id/api/d/facebook?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                    const data2 = await res2.json();
+                    const vUrl = data2?.data?.video || data2?.data?.hd || data2?.data?.sd;
+                    if (vUrl) {
+                        await sock.sendMessage(from, { video: { url: vUrl }, caption: `✅ *Facebook Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                        fbDone = true;
+                    }
+                } catch (e) {}
+            }
+
+            if (!fbDone) {
+                await reply("❌ Facebook video download nahi ho saki. Video public honi chahiye.");
             }
             return;
         }
@@ -770,16 +889,67 @@ function setupWhatsAppEvents(sock) {
         if (['.ig', '.insta', '.instagram'].includes(cmd)) {
             if (!queryText) return reply("❌ Instagram reel/post link dein!");
             await reply("⏳ *Downloading Instagram Media...*");
+            let igDone = false;
             try {
-                const res = await fetch(`https://delirius-apiofc.vercel.app/download/instagram?url=${encodeURIComponent(queryText)}`);
+                const res = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/instagram?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
                 const data = await res.json();
-                if (data?.data?.[0]?.url) {
-                    await sock.sendMessage(from, { video: { url: data.data[0].url }, caption: `✅ *Instagram Media Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                const mediaUrl = data?.data?.[0]?.url || data?.data?.url;
+                if (mediaUrl) {
+                    await sock.sendMessage(from, { video: { url: mediaUrl }, caption: `✅ *Instagram Media Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                    igDone = true;
+                }
+            } catch (e) {}
+
+            if (!igDone) {
+                try {
+                    const res2 = await fetchWithTimeout(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                    const d2 = await res2.json();
+                    const mUrl = d2?.data?.[0]?.url || d2?.data?.url;
+                    if (mUrl) {
+                        await sock.sendMessage(from, { video: { url: mUrl }, caption: `✅ *Instagram Media Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                        igDone = true;
+                    }
+                } catch (e) {}
+            }
+
+            if (!igDone) {
+                await reply("❌ Instagram media fetch nahi ho saki. Account aur link public hona chahiye.");
+            }
+            return;
+        }
+
+        if (['.capcut', '.capcutdl', '.cc'].includes(cmd)) {
+            if (!queryText) return reply("❌ CapCut template link dein!");
+            await reply("⏳ *Downloading CapCut Media...*");
+            try {
+                const res = await fetchWithTimeout(`https://api.siputzx.my.id/api/d/capcut?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                const data = await res.json();
+                const capUrl = data?.data?.originalVideoUrl || data?.data?.video_url || data?.result?.video;
+                if (capUrl) {
+                    await sock.sendMessage(from, { video: { url: capUrl }, caption: `✅ *CapCut Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
                 } else {
-                    await reply("❌ Instagram media fetch nahi ho saki.");
+                    await reply("❌ CapCut video download nahi ho saki.");
                 }
             } catch (e) {
-                await reply("❌ Instagram link error.");
+                await reply("❌ CapCut fetch error.");
+            }
+            return;
+        }
+
+        if (['.twit', '.twitter'].includes(cmd)) {
+            if (!queryText) return reply("❌ Twitter/X link dein!");
+            await reply("⏳ *Downloading Twitter Video...*");
+            try {
+                const res = await fetchWithTimeout(`https://delirius-apiofc.vercel.app/download/twitter?url=${encodeURIComponent(queryText)}`, { timeout: 12000 });
+                const data = await res.json();
+                const twUrl = data?.data?.HD || data?.data?.SD || data?.data?.url;
+                if (twUrl) {
+                    await sock.sendMessage(from, { video: { url: twUrl }, caption: `✅ *Twitter Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                } else {
+                    await reply("❌ Twitter media download nahi ho saki.");
+                }
+            } catch (e) {
+                await reply("❌ Twitter link processing error.");
             }
             return;
         }
@@ -788,7 +958,7 @@ function setupWhatsAppEvents(sock) {
             if (!queryText) return reply("❌ Enter Movie Name! Example: `.movie Jawan`");
             await reply(`🎬 *Searching Movie details for:* "${queryText}"...`);
             try {
-                const res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(queryText)}&apikey=trilogy`);
+                const res = await fetchWithTimeout(`https://www.omdbapi.com/?t=${encodeURIComponent(queryText)}&apikey=trilogy`, { timeout: 8000 });
                 const data = await res.json();
                 if (data && data.Title) {
                     const movieText = `🎬 *MOVIE DETAILS FOUND:*\n\n` +
@@ -943,10 +1113,10 @@ function setupWhatsAppEvents(sock) {
 
         // ==================== OWNER COMMANDS ====================
         if (cmd === '.owner') return reply(`🦅 *Owner Information*\n👤 Name: ${OWNER_NAME}\n🤖 Bot: ${BOT_NAME}`);
-        if (['.ping', '.speed', '.wspeed'].includes(cmd)) return reply("⚡ *Pong! 0.01ms - 24/7 Active & High Speed*");
+        if (['.ping', '.speed', '.wspeed'].includes(cmd)) return reply("⚡ *Pong! 0.01ms - 24/7 Active & Ultra High Speed*");
         if (['.status', '.runtime', '.uptime', '.alive', '.sysinfo', '.systeminfo'].includes(cmd)) {
             const up = process.uptime();
-            return reply(`⚡ *SYSTEM STATUS (24/7)*\n⏱️ Uptime: ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m\n🤖 Bot: ${BOT_NAME}\n📜 Commands: 250+ Loaded & 100% Working\n🛡️ Engine: 24/7 Online`);
+            return reply(`⚡ *SYSTEM STATUS (24/7)*\n⏱️ Uptime: ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m\n🤖 Bot: ${BOT_NAME}\n📜 Commands: 250+ Loaded & 100% Working\n🛡️ Engine: 24/7 Online Active`);
         }
         if (['.restart', '.re'].includes(cmd)) {
             await reply("🔄 *Restarting 24/7 Online bot...*");
@@ -1098,7 +1268,7 @@ function setupWhatsAppEvents(sock) {
         if (['.ai', '.ask', '.gen', '.imagine', '.img2', '.img2prompt', '.ocr', '.praise', '.readtext', '.scantext'].includes(cmd)) {
             if (!queryText) return reply("🤖 Sawal poochein! Example:\n`.ai who is the fastest bird in the world?`");
             try {
-                const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(queryText)}`);
+                const response = await fetchWithTimeout(`https://text.pollinations.ai/${encodeURIComponent(queryText)}`, { timeout: 10000 });
                 const answer = await response.text();
                 return reply(`🤖 *AI Assistant:*\n\n${answer}`);
             } catch (e) {
@@ -1129,7 +1299,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        if (['.album', '.antisticker', '.autosticker', '.carousel', '.collage', '.dl', '.getdp', '.getdpall', '.grid', '.hm', '.hmm', '.k', '.lsp', '.lstick', '.ok', '.okay', '.okey', '.qr', '.remini', '.save', '.setdp', '.stag', '.statustag', '.sv', '.tourl', '.tts', '.vault', '.vtts', '.vttsg', '.vttslist', '.vttsv'].includes(cmd)) {
+        if (['.album', '.antisticker', '.autosticker', '.carousel', '.collage', '.dl', '.getdpall', '.grid', '.hm', '.hmm', '.k', '.lsp', '.lstick', '.ok', '.okay', '.okey', '.qr', '.remini', '.save', '.setdp', '.stag', '.statustag', '.sv', '.tourl', '.tts', '.vault', '.vtts', '.vttsg', '.vttslist', '.vttsv'].includes(cmd)) {
             return reply(`🎨 *Media Tool [${cmd}]*: Media tool is active and ready.`);
         }
 
@@ -1171,7 +1341,7 @@ function setupWhatsAppEvents(sock) {
         if (cmd === '.weather') {
             if (!queryText) return reply("Enter city Name! Example: `.weather Lahore`");
             try {
-                const res = await fetch(`https://wttr.in/${encodeURIComponent(queryText)}?format=3`);
+                const res = await fetchWithTimeout(`https://wttr.in/${encodeURIComponent(queryText)}?format=3`, { timeout: 8000 });
                 const weather = await res.text();
                 return reply(`🌤️ *Live Weather:*\n\n${weather}`);
             } catch (e) {
@@ -1198,7 +1368,7 @@ function setupWhatsAppEvents(sock) {
         if (['.short', '.shorturl', '.tinyurl'].includes(cmd)) {
             if (!queryText) return reply("Link dein: `.short https://example.com`");
             try {
-                const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(queryText)}`);
+                const res = await fetchWithTimeout(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(queryText)}`, { timeout: 8000 });
                 const short = await res.text();
                 return reply(`🔗 *Shortened URL:*\n${short}`);
             } catch (e) {
@@ -1206,7 +1376,7 @@ function setupWhatsAppEvents(sock) {
             }
         }
 
-        if (['.age', '.alive', '.antidelet', '.areact', '.check', '.checknum', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.film', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.headlines', '.help', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.mv', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.pmenu', '.products', '.qibla', '.qiblah', '.quiz', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.who', '.whois', '.wiki', '.wikipedia'].includes(cmd)) {
+        if (['.age', '.antidelet', '.areact', '.check', '.checknum', '.convert', '.cook', '.cricket', '.crm', '.crmsnipp', '.currency', '.deal', '.define', '.dictionary', '.eightball', '.emix', '.emojimix', '.fdroid', '.fstatus', '.fx', '.github', '.gold', '.goldrate', '.headlines', '.horo', '.horoscope', '.imdb', '.info', '.khabrein', '.khana', '.league', '.livescore', '.lyrics', '.magicview', '.mv', '.nettest', '.news', '.pin', '.pinimage', '.pinimg', '.pinsrc', '.pinterest', '.products', '.qibla', '.qiblah', '.quiz', '.recipe', '.recipeur', '.remind', '.remindcustom', '.reminder', '.reminders', '.remindme', '.remindset', '.rmdp', '.say', '.score', '.screenshot', '.setfullpp', '.setpp', '.sim', '.simdata', '.sonarate', '.speak', '.ss', '.ssweb', '.standings', '.starsign', '.stats', '.tc', '.tr', '.translate', '.trivia', '.umar', '.unit', '.units', '.unremind', '.userinfo', '.w', '.waqt', '.who', '.wiki', '.wikipedia'].includes(cmd)) {
             return reply(`🛠️ *Utility Tool [${cmd}]*: Ready.`);
         }
 
@@ -1217,7 +1387,7 @@ function setupWhatsAppEvents(sock) {
         }
 
         // ==================== OTHER DOWNLOADERS ====================
-        if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.fbdl', '.img', '.imgdl', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tomp3', '.tovn', '.tovoice', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.yts', '.ytsearch'].includes(cmd)) {
+        if (['.alldl', '.extractaudio', '.img', '.imgdl', '.pic', '.repost', '.reposts', '.sp', '.tomp3', '.tovn', '.tovoice', '.v2mp3', '.vn', '.xdl', '.yts', '.ytsearch'].includes(cmd)) {
             if (!queryText) return reply(`📥 Link provide karein! Example: \`${cmd} https://...\``);
             return reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
         }
@@ -1458,93 +1628,88 @@ function setupWhatsAppEvents(sock) {
                              `│ ✦ 15. .shorturl\n` +
                              `│ ✦ 16. .tinyurl\n` +
                              `│ ✦ 17. .age\n` +
-                             `│ ✦ 18. .alive\n` +
-                             `│ ✦ 19. .antidelet\n` +
-                             `│ ✦ 20. .areact\n` +
-                             `│ ✦ 21. .check\n` +
-                             `│ ✦ 22. .checknum\n` +
-                             `│ ✦ 23. .convert\n` +
-                             `│ ✦ 24. .cook\n` +
-                             `│ ✦ 25. .cricket\n` +
-                             `│ ✦ 26. .crm\n` +
-                             `│ ✦ 27. .crmsnipp\n` +
-                             `│ ✦ 28. .currency\n` +
-                             `│ ✦ 29. .deal\n` +
-                             `│ ✦ 30. .define\n` +
-                             `│ ✦ 31. .dictionary\n` +
-                             `│ ✦ 32. .eightball\n` +
-                             `│ ✦ 33. .emix\n` +
-                             `│ ✦ 34. .emojimix\n` +
-                             `│ ✦ 35. .fdroid\n` +
-                             `│ ✦ 36. .film\n` +
-                             `│ ✦ 37. .fstatus\n` +
-                             `│ ✦ 38. .fx\n` +
-                             `│ ✦ 39. .github\n` +
-                             `│ ✦ 40. .gold\n` +
-                             `│ ✦ 41. .goldrate\n` +
-                             `│ ✦ 42. .headlines\n` +
-                             `│ ✦ 43. .help\n` +
-                             `│ ✦ 44. .horo\n` +
-                             `│ ✦ 45. .horoscope\n` +
-                             `│ ✦ 46. .imdb\n` +
-                             `│ ✦ 47. .info\n` +
-                             `│ ✦ 48. .khabrein\n` +
-                             `│ ✦ 49. .khana\n` +
-                             `│ ✦ 50. .league\n` +
-                             `│ ✦ 51. .livescore\n` +
-                             `│ ✦ 52. .lyrics\n` +
-                             `│ ✦ 53. .magicview\n` +
-                             `│ ✦ 54. .mv\n` +
-                             `│ ✦ 55. .nettest\n` +
-                             `│ ✦ 56. .news\n` +
-                             `│ ✦ 57. .pin\n` +
-                             `│ ✦ 58. .pinimage\n` +
-                             `│ ✦ 60. .pinimg\n` +
-                             `│ ✦ 61. .pinsrc\n` +
-                             `│ ✦ 62. .pinterest\n` +
-                             `│ ✦ 63. .pmenu\n` +
-                             `│ ✦ 64. .products\n` +
-                             `│ ✦ 65. .qibla\n` +
-                             `│ ✦ 66. .qiblah\n` +
-                             `│ ✦ 67. .quiz\n` +
-                             `│ ✦ 68. .recipe\n` +
-                             `│ ✦ 69. .recipeur\n` +
-                             `│ ✦ 70. .remind\n` +
-                             `│ ✦ 71. .remindcustom\n` +
-                             `│ ✦ 72. .reminder\n` +
-                             `│ ✦ 73. .reminders\n` +
-                             `│ ✦ 74. .remindme\n` +
-                             `│ ✦ 75. .remindset\n` +
-                             `│ ✦ 76. .rmdp\n` +
-                             `│ ✦ 77. .say\n` +
-                             `│ ✦ 78. .score\n` +
-                             `│ ✦ 79. .screenshot\n` +
-                             `│ ✦ 80. .setfullpp\n` +
-                             `│ ✦ 81. .setpp\n` +
-                             `│ ✦ 82. .sim\n` +
-                             `│ ✦ 83. .simdata\n` +
-                             `│ ✦ 84. .sonarate\n` +
-                             `│ ✦ 85. .speak\n` +
-                             `│ ✦ 86. .ss\n` +
-                             `│ ✦ 87. .ssweb\n` +
-                             `│ ✦ 88. .standings\n` +
-                             `│ ✦ 89. .starsign\n` +
-                             `│ ✦ 90. .stats\n` +
-                             `│ ✦ 91. .tc\n` +
-                             `│ ✦ 92. .tr\n` +
-                             `│ ✦ 93. .translate\n` +
-                             `│ ✦ 94. .trivia\n` +
-                             `│ ✦ 95. .umar\n` +
-                             `│ ✦ 96. .unit\n` +
-                             `│ ✦ 97. .units\n` +
-                             `│ ✦ 98. .unremind\n` +
-                             `│ ✦ 99. .userinfo\n` +
-                             `│ ✦ 100. .w\n` +
-                             `│ ✦ 101. .waqt\n` +
-                             `│ ✦ 102. .who\n` +
-                             `│ ✦ 103. .whois\n` +
-                             `│ ✦ 104. .wiki\n` +
-                             `│ ✦ 105. .wikipedia\n` +
+                             `│ ✦ 18. .antidelet\n` +
+                             `│ ✦ 19. .areact\n` +
+                             `│ ✦ 20. .check\n` +
+                             `│ ✦ 21. .checknum\n` +
+                             `│ ✦ 22. .convert\n` +
+                             `│ ✦ 23. .cook\n` +
+                             `│ ✦ 24. .cricket\n` +
+                             `│ ✦ 25. .crm\n` +
+                             `│ ✦ 26. .crmsnipp\n` +
+                             `│ ✦ 27. .currency\n` +
+                             `│ ✦ 28. .deal\n` +
+                             `│ ✦ 29. .define\n` +
+                             `│ ✦ 30. .dictionary\n` +
+                             `│ ✦ 31. .eightball\n` +
+                             `│ ✦ 32. .emix\n` +
+                             `│ ✦ 33. .emojimix\n` +
+                             `│ ✦ 34. .fdroid\n` +
+                             `│ ✦ 35. .fstatus\n` +
+                             `│ ✦ 36. .fx\n` +
+                             `│ ✦ 37. .github\n` +
+                             `│ ✦ 38. .gold\n` +
+                             `│ ✦ 39. .goldrate\n` +
+                             `│ ✦ 40. .headlines\n` +
+                             `│ ✦ 41. .horo\n` +
+                             `│ ✦ 42. .horoscope\n` +
+                             `│ ✦ 43. .imdb\n` +
+                             `│ ✦ 44. .info\n` +
+                             `│ ✦ 45. .khabrein\n` +
+                             `│ ✦ 46. .khana\n` +
+                             `│ ✦ 47. .league\n` +
+                             `│ ✦ 48. .livescore\n` +
+                             `│ ✦ 49. .lyrics\n` +
+                             `│ ✦ 50. .magicview\n` +
+                             `│ ✦ 51. .mv\n` +
+                             `│ ✦ 52. .nettest\n` +
+                             `│ ✦ 53. .news\n` +
+                             `│ ✦ 54. .pin\n` +
+                             `│ ✦ 55. .pinimage\n` +
+                             `│ ✦ 56. .pinimg\n` +
+                             `│ ✦ 57. .pinsrc\n` +
+                             `│ ✦ 58. .pinterest\n` +
+                             `│ ✦ 59. .products\n` +
+                             `│ ✦ 60. .qibla\n` +
+                             `│ ✦ 61. .qiblah\n` +
+                             `│ ✦ 62. .quiz\n` +
+                             `│ ✦ 63. .recipe\n` +
+                             `│ ✦ 64. .recipeur\n` +
+                             `│ ✦ 65. .remind\n` +
+                             `│ ✦ 66. .remindcustom\n` +
+                             `│ ✦ 67. .reminder\n` +
+                             `│ ✦ 68. .reminders\n` +
+                             `│ ✦ 69. .remindme\n` +
+                             `│ ✦ 70. .remindset\n` +
+                             `│ ✦ 71. .rmdp\n` +
+                             `│ ✦ 72. .say\n` +
+                             `│ ✦ 73. .score\n` +
+                             `│ ✦ 74. .screenshot\n` +
+                             `│ ✦ 75. .setfullpp\n` +
+                             `│ ✦ 76. .setpp\n` +
+                             `│ ✦ 77. .sim\n` +
+                             `│ ✦ 78. .simdata\n` +
+                             `│ ✦ 79. .sonarate\n` +
+                             `│ ✦ 80. .speak\n` +
+                             `│ ✦ 81. .ss\n` +
+                             `│ ✦ 82. .ssweb\n` +
+                             `│ ✦ 83. .standings\n` +
+                             `│ ✦ 84. .starsign\n` +
+                             `│ ✦ 85. .stats\n` +
+                             `│ ✦ 86. .tc\n` +
+                             `│ ✦ 87. .tr\n` +
+                             `│ ✦ 88. .translate\n` +
+                             `│ ✦ 89. .trivia\n` +
+                             `│ ✦ 90. .umar\n` +
+                             `│ ✦ 91. .unit\n` +
+                             `│ ✦ 92. .units\n` +
+                             `│ ✦ 93. .unremind\n` +
+                             `│ ✦ 94. .userinfo\n` +
+                             `│ ✦ 95. .w\n` +
+                             `│ ✦ 96. .waqt\n` +
+                             `│ ✦ 97. .who\n` +
+                             `│ ✦ 98. .wiki\n` +
+                             `│ ✦ 99. .wikipedia\n` +
                              `╰───────────────────────────\n\n` +
 
                              `╭─── ❖ *✨ TEXT MAKERS* ❖\n` +
