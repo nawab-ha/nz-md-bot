@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
+// 24/7 ANTI-SLEEP WEB SERVER
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -22,6 +23,7 @@ http.createServer((req, res) => {
     console.log(`[+] 24/7 Server running on port ${PORT}`);
 });
 
+// CRASH PREVENTION GUARDS
 process.on('uncaughtException', (err) => console.log('[-] Caught Exception:', err.message));
 process.on('unhandledRejection', (err) => console.log('[-] Unhandled Rejection:', err));
 
@@ -64,11 +66,12 @@ const processedMsgIds = new Set();
 const botSentMsgIds = new Set();
 const commandCooldown = new Map();
 
-// REAL IN-MEMORY CACHE FOR ANTI-DELETE (.delshowmsg)
+// ANTI-DELETE REAL-TIME CACHE
 const recentMessagesCache = new Map();
 const deletedMessagesLog = [];
+const groupMetadataCache = new Map();
 
-console.log(`[+] ${BOT_NAME} 24/7 Active...`);
+console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
 
 // ==================== AUTO-RESTORE ACTIVE SESSIONS ON DEPLOY / REBOOT ====================
 async function restoreAllSessions() {
@@ -81,7 +84,7 @@ async function restoreAllSessions() {
                 const sessionKey = folder.replace('session_', '');
                 console.log(`[+] Restoring Active Session: ${sessionKey}`);
                 startSocketEngine(fullPath, sessionKey);
-                await delay(2500);
+                await delay(2000);
             }
         }
     } catch (e) {}
@@ -112,9 +115,9 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
             },
-            defaultQueryTimeoutMs: undefined,
+            defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000,
+            keepAliveIntervalMs: 15000,
             emitOwnEvents: true,
             fireInitQueries: true,
             syncFullHistory: false,
@@ -143,9 +146,9 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
             } else if (connection === 'close') {
                 if (heartbeatTimer) clearInterval(heartbeatTimer);
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Auto-Reconnecting...`);
+                console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Reconnecting...`);
 
-                if (statusCode !== DisconnectReason.loggedOut) {
+                if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401 && statusCode !== 403) {
                     setTimeout(() => startSocketEngine(sessionDir, sessionKey, onReady), 2500);
                 } else {
                     console.log(`Session [${sessionKey}] Logged Out.`);
@@ -273,25 +276,42 @@ tgBot.onText(/\/pair (.+)/, async (msg, match) => {
     }
 });
 
+// ==================== CACHED GROUP METADATA & NUMBER RESOLVER ====================
+async function getCachedGroupMetadata(sock, from) {
+    const cached = groupMetadataCache.get(from);
+    if (cached && (Date.now() - cached.time < 300000)) return cached.data;
+    try {
+        const meta = await sock.groupMetadata(from);
+        groupMetadataCache.set(from, { data: meta, time: Date.now() });
+        return meta;
+    } catch (e) {
+        return cached?.data || null;
+    }
+}
+
 async function resolveRealNumber(sock, from, jid) {
     if (!jid) return '';
     let clean = jid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
     if (from && from.endsWith('@g.us') && jid.includes('@lid')) {
         try {
-            const meta = await sock.groupMetadata(from);
-            const found = meta.participants.find(p => p.id === jid || (p.lid && p.lid === jid) || p.id.includes(clean));
-            if (found) {
-                return found.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+            const meta = await getCachedGroupMetadata(sock, from);
+            if (meta) {
+                const found = meta.participants.find(p => p.id === jid || (p.lid && p.lid === jid) || p.id.includes(clean));
+                if (found) {
+                    return found.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                }
             }
         } catch (e) {}
     }
     return clean;
 }
 
+// ==================== WHATSAPP EVENT HANDLER (DUPLICATE-PROOF & INBOX UNLOCKED) ====================
 function setupWhatsAppEvents(sock) {
     if (sock._eventsLoaded) return;
     sock._eventsLoaded = true;
 
+    // AUTO CHANNEL FOLLOW
     (async () => {
         await delay(6000);
         for (let ch of REQUIRED_CHANNELS) {
@@ -308,19 +328,21 @@ function setupWhatsAppEvents(sock) {
         }
     })();
 
+    // GROUP PARTICIPANTS WELCOME & GOODBYE
     sock.ev.on('group-participants.update', async (anu) => {
         if (botSettings.privatemode) return;
         try {
-            let meta = await sock.groupMetadata(anu.id);
+            let meta = await getCachedGroupMetadata(sock, anu.id);
+            const groupName = meta ? meta.subject : 'Group';
             for (let num of anu.participants) {
                 if (anu.action === 'add') {
                     await sock.sendMessage(anu.id, {
-                        text: `👑 *Welcome @${num.split('@')[0]} to ${meta.subject}* 🦅\nA JAYN SIR APKA HI INTZAR THA HME!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
+                        text: `👑 *Welcome @${num.split('@')[0]} to ${groupName}* 🦅\nA JAYN SIR APKA HI INTZAR THA HME!\n\n> 👑 *Owner:* ${OWNER_NAME}`,
                         mentions: [num]
                     });
                 } else if (anu.action === 'remove') {
                     await sock.sendMessage(anu.id, {
-                        text: `👋 *Good Bye @${num.split('@')[0]} from ${meta.subject}!*\nAllah Hafiz! DUAO ME YAD RKHNA.\n\n> 👑 *Owner:* ${OWNER_NAME}`,
+                        text: `👋 *Good Bye @${num.split('@')[0]} from ${groupName}!*\nAllah Hafiz! DUAO ME YAD RKHNA.\n\n> 👑 *Owner:* ${OWNER_NAME}`,
                         mentions: [num]
                     });
                 }
@@ -332,13 +354,14 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
+        // 1. FIX: TIME FILTER (RELAXED TO 300 SECONDS TO PREVENT FALSE SLEEP MODE)
         let msgTimestamp = m.messageTimestamp;
         if (typeof msgTimestamp === 'object' && msgTimestamp?.low) {
             msgTimestamp = msgTimestamp.low;
         }
         msgTimestamp = Number(msgTimestamp);
         const currentSec = Math.floor(Date.now() / 1000);
-        if (msgTimestamp && (currentSec - msgTimestamp > 30)) return;
+        if (msgTimestamp && (currentSec - msgTimestamp > 300)) return;
 
         // 2. MESSAGE DEDUPLICATION (PREVENTS SPAM / REPEATED MSGS)
         const msgId = m.key.id;
@@ -363,9 +386,9 @@ function setupWhatsAppEvents(sock) {
         if (msg.viewOnceMessage?.message) msg = msg.viewOnceMessage.message;
         if (msg.viewOnceMessageV2?.message) msg = msg.viewOnceMessageV2.message;
         if (msg.documentWithCaptionMessage?.message) msg = msg.documentWithCaptionMessage.message;
-        if (msg.deviceSentMessage?.message) msg = msg.deviceSentMessage.message; // Unboxes phone sync in DMs
+        if (msg.deviceSentMessage?.message) msg = msg.deviceSentMessage.message;
 
-        // 5. DETECT REVOKE (DELETE FOR EVERYONE) AND RECORD WITH REAL SENDER NUMBER
+        // 5. DETECT REVOKE (DELETE FOR EVERYONE)
         if (m.message.protocolMessage && (m.message.protocolMessage.type === 0 || m.message.protocolMessage.type === 'REVOKE')) {
             const targetId = m.message.protocolMessage.key?.id;
             if (recentMessagesCache.has(targetId)) {
@@ -407,26 +430,27 @@ function setupWhatsAppEvents(sock) {
             const hasLink = /(chat\.whatsapp\.com\/[0-9A-Za-z]{20,24}|https?:\/\/[^\s]+)/gi.test(body);
             if (hasLink) {
                 try {
-                    const groupMeta = await sock.groupMetadata(from);
-                    const botNum = (sock.user?.id || '').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                    const senderNum = senderJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                    const isSenderAdmin = groupMeta.participants.some(p => {
-                        const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                        return pPhone === senderNum && (p.admin === 'admin' || p.admin === 'superadmin');
-                    });
-                    
-                    if (!isSenderAdmin) {
-                        if (antilinkDB[from].delete) {
-                            await sock.sendMessage(from, { delete: m.key });
+                    const groupMeta = await getCachedGroupMetadata(sock, from);
+                    if (groupMeta) {
+                        const senderNum = senderJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                        const isSenderAdmin = groupMeta.participants.some(p => {
+                            const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                            return pPhone === senderNum && (p.admin === 'admin' || p.admin === 'superadmin');
+                        });
+                        
+                        if (!isSenderAdmin) {
+                            if (antilinkDB[from].delete) {
+                                await sock.sendMessage(from, { delete: m.key });
+                            }
+                            if (antilinkDB[from].remove) {
+                                await sock.groupParticipantsUpdate(from, [senderJid], 'remove');
+                                await sock.sendMessage(from, { 
+                                    text: `🚫 @${senderNum} Removed successfully!`,
+                                    mentions: [senderJid]
+                                });
+                            }
+                            return;
                         }
-                        if (antilinkDB[from].remove) {
-                            await sock.groupParticipantsUpdate(from, [senderJid], 'remove');
-                            await sock.sendMessage(from, { 
-                                text: `🚫 @${senderNum} Removed successfully!`,
-                                mentions: [senderJid]
-                            });
-                        }
-                        return;
                     }
                 } catch (err) {}
             }
@@ -451,10 +475,10 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // COOLDOWN TO PREVENT USER BUTTON MASHING / SPAM
+        // USER COOLDOWN TO PREVENT BUTTON MASHING / SPAM
         const cooldownKey = `${senderJid}_${cmd}`;
         const lastExecuted = commandCooldown.get(cooldownKey) || 0;
-        if (Date.now() - lastExecuted < 2500) return;
+        if (Date.now() - lastExecuted < 2000) return;
         commandCooldown.set(cooldownKey, Date.now());
 
         // CRASH-PROOF REPLY FUNCTION WITH AUTOMATIC UNQUOTED FALLBACK
@@ -480,7 +504,7 @@ function setupWhatsAppEvents(sock) {
             if (raw && raw.startsWith('0')) raw = '92' + raw.slice(1);
             if (!raw || raw.length < 10) return reply("❌ *Usage:* `.pair 92300xxxxxxx`\nEnter your number with country code.");
 
-            await reply(`🔄 *Generating Pairing Code for +${raw}...*`);
+            await reply(`🔄 *Generating Real WhatsApp Pairing Code for +${raw}...*`);
 
             const subSessionKey = `wa_${raw}`;
             const pairSessionDir = path.join(__dirname, 'sessions', `session_${subSessionKey}`);
@@ -528,7 +552,7 @@ function setupWhatsAppEvents(sock) {
             if (opt === 'on') {
                 botSettings.privatemode = true;
                 saveSettings();
-                return reply("🔒 *Private Mode:* ON!\nOnly owner can use this bot now.");
+                return reply("🔒 *Private Mode:* ON!\nOnly owner can use this bot now (Welcome & Goodbye also locked).");
             } else if (opt === 'off') {
                 botSettings.privatemode = false;
                 saveSettings();
@@ -566,6 +590,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 4. .DELSHOWMSG (LAST 1 HOUR DELETED MESSAGES) ====================
         if (cmd === '.delshowmsg' || cmd === '.deletedmsgs') {
             const oneHourAgo = Date.now() - 3600000;
             let logs = deletedMessagesLog.filter(x => x.timestamp >= oneHourAgo);
@@ -591,19 +616,21 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
+        // ==================== 5. FIXED .KICKALL (100% RELIABLE ADMIN DETECTION) ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌ Only use in groups.");
-            const meta = await sock.groupMetadata(from);
+            const meta = await getCachedGroupMetadata(sock, from);
+            if (!meta) return reply("❌ Group information load nahi ho saki.");
             
             const rawBotJid = sock.user?.id || '';
             const botPhoneNumber = rawBotJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
             
             const isBotAdmin = meta.participants.some(p => {
                 const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                return pPhone === botPhoneNumber && (p.admin === 'admin' || p.admin === 'superadmin');
+                return (pPhone === botPhoneNumber || p.id.includes(botPhoneNumber)) && (p.admin === 'admin' || p.admin === 'superadmin');
             });
 
-            if (!isBotAdmin) return reply("❌ Pehle Bot ko Group Admin banayein!");
+            if (!isBotAdmin && !m.key.fromMe) return reply("❌ Pehle Bot ko Group Admin banayein!");
 
             const senderPhone = senderJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
             const isSenderAdmin = meta.participants.some(p => {
@@ -620,12 +647,12 @@ function setupWhatsAppEvents(sock) {
 
             if (membersToKick.length === 0) return reply("❌ Kick karne ke liye koi aam member nahi mila (sab admins hain).");
 
-            await reply(`⚠️ *Kickall Started!* Total ${membersToKick.length} members ko safe delay ke sath remove kiya ja raha hai...`);
+            await reply(`⚠️ *Kickall Started!* Total ${membersToKick.length} members ko remove kiya ja raha hai...`);
 
             for (let member of membersToKick) {
                 try {
                     await sock.groupParticipantsUpdate(from, [member], 'remove');
-                    await delay(1200);
+                    await delay(800);
                 } catch (e) {}
             }
 
@@ -654,68 +681,29 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== AUTOREACT ====================
-        if (cmd === '.autoreact') {
-            const opt = args[0]?.toLowerCase();
-            if (opt === 'on') {
-                botSettings.autoreact = true;
-                saveSettings();
-                return reply("✅ *Auto-React:* ON!");
-            } else if (opt === 'off') {
-                botSettings.autoreact = false;
-                saveSettings();
-                return reply("❌ *Auto-React:* OFF.");
-            }
-            return reply(`⚙️ *Auto-React Status:* ${botSettings.autoreact ? 'ON ✅' : 'OFF ❌'}\nUsage: \`.autoreact on/off\``);
-        }
-
-        // ==================== .PLAY & .SONG (DIRECT AUDIO) ====================
-        if (cmd === '.play' || cmd === '.song') {
-            if (!queryText) return reply("❌ Enter song Name! Example: `.play Chale Aana`");
+        // ==================== 7. WORKING DOWNLOADERS ENGINE ====================
+        if (cmd === '.play' || cmd === '.song' || cmd === '.ytmp3') {
+            if (!queryText) return reply("❌ Song ka naam ya link dein! Example: `.play Chale Aana`");
             await reply(`🔍 *Searching & Downloading Audio for:* "${queryText}"... Please wait!`);
 
             let audioSent = false;
+            // Primary Engine
             try {
-                const apiRes = await fetch(`https://api.vreden.my.id/api/ytplaymp3?query=${encodeURIComponent(queryText)}`);
+                const apiRes = await fetch(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(queryText)}`);
                 const data = await apiRes.json();
-                if (data?.result?.download?.url) {
-                    await sock.sendMessage(from, { 
-                        audio: { url: data.result.download.url }, 
-                        mimetype: 'audio/mp4',
-                        ptt: false,
-                        fileName: `${queryText}.mp3`
-                    }, { quoted: m });
+                if (data?.data?.dl) {
+                    await sock.sendMessage(from, { audio: { url: data.data.dl }, mimetype: 'audio/mp4', ptt: false, fileName: `${queryText}.mp3` }, { quoted: m });
                     audioSent = true;
                 }
             } catch (e) {}
 
+            // Fallback Engine 2
             if (!audioSent) {
                 try {
-                    const fallbackRes = await fetch(`https://api.agatz.xyz/api/ytmp3?url=https://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
+                    const fallbackRes = await fetch(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(queryText)}`);
                     const fData = await fallbackRes.json();
-                    if (fData?.data?.downloadUrl) {
-                        await sock.sendMessage(from, { 
-                            audio: { url: fData.data.downloadUrl }, 
-                            mimetype: 'audio/mp4',
-                            ptt: false,
-                            fileName: `${queryText}.mp3`
-                        }, { quoted: m });
-                        audioSent = true;
-                    }
-                } catch (e) {}
-            }
-
-            if (!audioSent) {
-                try {
-                    const wRes = await fetch(`https://widipe.com/download/ytdl?url=https://www.youtube.com/results?search_query=${encodeURIComponent(queryText)}`);
-                    const wData = await wRes.json();
-                    if (wData?.result?.mp3) {
-                        await sock.sendMessage(from, { 
-                            audio: { url: wData.result.mp3 }, 
-                            mimetype: 'audio/mp4',
-                            ptt: false,
-                            fileName: `${queryText}.mp3`
-                        }, { quoted: m });
+                    if (fData?.data?.download?.url) {
+                        await sock.sendMessage(from, { audio: { url: fData.data.download.url }, mimetype: 'audio/mp4', ptt: false, fileName: `${queryText}.mp3` }, { quoted: m });
                         audioSent = true;
                     }
                 } catch (e) {}
@@ -727,7 +715,75 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== .MOVIE ====================
+        if (['.tiktok', '.tt'].includes(cmd)) {
+            if (!queryText) return reply("❌ TikTok video link dein! Example: `.tiktok https://vm.tiktok.com/...`");
+            await reply("⏳ *Downloading TikTok Video without watermark...*");
+            try {
+                const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(queryText)}`);
+                const data = await res.json();
+                if (data?.data?.play) {
+                    await sock.sendMessage(from, { video: { url: data.data.play }, caption: `✅ *TikTok Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                } else {
+                    await reply("❌ TikTok video download nahi ho saki. Link public hona chahiye.");
+                }
+            } catch (e) {
+                await reply("❌ Video fetch error.");
+            }
+            return;
+        }
+
+        if (['.ytmp4', '.video'].includes(cmd)) {
+            if (!queryText) return reply("❌ YouTube video link ya name dein!");
+            await reply("⏳ *Fetching Video Stream...*");
+            try {
+                const res = await fetch(`https://delirius-apiofc.vercel.app/download/ytmp4?url=${encodeURIComponent(queryText)}`);
+                const data = await res.json();
+                if (data?.data?.download?.url) {
+                    await sock.sendMessage(from, { video: { url: data.data.download.url }, caption: `✅ *Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                } else {
+                    await reply("❌ Video stream download nahi ho saki.");
+                }
+            } catch (e) {
+                await reply("❌ Server error while downloading video.");
+            }
+            return;
+        }
+
+        if (['.fb', '.facebook', '.fbdl'].includes(cmd)) {
+            if (!queryText) return reply("❌ Facebook video link dein!");
+            await reply("⏳ *Downloading Facebook Video...*");
+            try {
+                const res = await fetch(`https://delirius-apiofc.vercel.app/download/facebook?url=${encodeURIComponent(queryText)}`);
+                const data = await res.json();
+                const videoUrl = data?.data?.urls?.[0]?.hd || data?.data?.urls?.[0]?.sd;
+                if (videoUrl) {
+                    await sock.sendMessage(from, { video: { url: videoUrl }, caption: `✅ *Facebook Video Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                } else {
+                    await reply("❌ Facebook video download nahi ho saki.");
+                }
+            } catch (e) {
+                await reply("❌ Link process karne mein error aaya.");
+            }
+            return;
+        }
+
+        if (['.ig', '.insta', '.instagram'].includes(cmd)) {
+            if (!queryText) return reply("❌ Instagram reel/post link dein!");
+            await reply("⏳ *Downloading Instagram Media...*");
+            try {
+                const res = await fetch(`https://delirius-apiofc.vercel.app/download/instagram?url=${encodeURIComponent(queryText)}`);
+                const data = await res.json();
+                if (data?.data?.[0]?.url) {
+                    await sock.sendMessage(from, { video: { url: data.data[0].url }, caption: `✅ *Instagram Media Downloaded!*\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
+                } else {
+                    await reply("❌ Instagram media fetch nahi ho saki.");
+                }
+            } catch (e) {
+                await reply("❌ Instagram link error.");
+            }
+            return;
+        }
+
         if (cmd === '.movie' || cmd === '.film') {
             if (!queryText) return reply("❌ Enter Movie Name! Example: `.movie Jawan`");
             await reply(`🎬 *Searching Movie details for:* "${queryText}"...`);
@@ -757,46 +813,11 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== TIKTOK & YTMP4 DOWNLOADERS ====================
-        if (['.tiktok', '.tt'].includes(cmd)) {
-            if (!queryText) return reply("❌ TikTok video ka link dein! Example: `.tiktok https://vm.tiktok.com/...`");
-            await reply("⏳ *Downloading TikTok Video without watermark...*");
-            try {
-                const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(queryText)}`);
-                const data = await res.json();
-                if (data?.video?.noWatermark) {
-                    await sock.sendMessage(from, { video: { url: data.video.noWatermark }, caption: `✅ TikTok Video Downloaded!\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                } else {
-                    await reply("❌ TikTok video download nahi ho saki. Link check karein.");
-                }
-            } catch (e) {
-                await reply("❌ Video fetch error. Link public hona chahiye.");
-            }
-            return;
-        }
-
-        if (['.ytmp4', '.video'].includes(cmd)) {
-            if (!queryText) return reply("❌ YouTube video link dein! Example: `.ytmp4 https://youtube.com/watch?v=...`");
-            await reply("⏳ *Fetching Video Stream...*");
-            try {
-                const res = await fetch(`https://api.vreden.my.id/api/ytmp4?url=${encodeURIComponent(queryText)}`);
-                const data = await res.json();
-                if (data?.result?.download?.url) {
-                    await sock.sendMessage(from, { video: { url: data.result.download.url }, caption: `✅ Video Downloaded!\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                } else {
-                    await reply("❌ Video stream download nahi ho saki.");
-                }
-            } catch (e) {
-                await reply("❌ Server error while downloading video.");
-            }
-            return;
-        }
-
         // ==================== BULK .ADD ====================
         if (cmd === '.add') {
             if (!isGroup) return reply("❌ only use in groups.");
-            const meta = await sock.groupMetadata(from);
-            const isSenderAdmin = meta.participants.some(p => p.id === senderJid && p.admin) || m.key.fromMe;
+            const meta = await getCachedGroupMetadata(sock, from);
+            const isSenderAdmin = meta?.participants.some(p => p.id === senderJid && p.admin) || m.key.fromMe;
             if (!isSenderAdmin) return reply("❌ Only group admins can add new members.");
 
             if (!args.length) return reply("❌ *Usage:* `.add 923001234567 923007654321` (Ek ya zyada numbers likhein).");
@@ -850,8 +871,8 @@ function setupWhatsAppEvents(sock) {
         // ==================== ANTILINK CONFIG ====================
         if (cmd === '.antilink') {
             if (!isGroup) return reply("❌ only use in groups.");
-            const groupMeta = await sock.groupMetadata(from);
-            const isSenderAdmin = groupMeta.participants.some(p => p.id === senderJid && p.admin) || m.key.fromMe;
+            const groupMeta = await getCachedGroupMetadata(sock, from);
+            const isSenderAdmin = groupMeta?.participants.some(p => p.id === senderJid && p.admin) || m.key.fromMe;
             if (!isSenderAdmin) return reply("❌ Sirf group admins hi Antilink configure kar sakte hain.");
 
             if (!antilinkDB[from]) antilinkDB[from] = { delete: false, remove: false };
@@ -873,7 +894,7 @@ function setupWhatsAppEvents(sock) {
                 if (action === 'on') {
                     antilinkDB[from].remove = true;
                     saveAntilink();
-                    return reply("✅ *Antilink Auto-Remove:* ON..");
+                    return reply("✅ *Antilink Auto-Remove:* ON ! (Link bhejne wala remove hoga)");
                 } else if (action === 'off') {
                     antilinkDB[from].remove = false;
                     saveAntilink();
@@ -942,11 +963,13 @@ function setupWhatsAppEvents(sock) {
         // ==================== GROUP CONTROLS ====================
         if (['.tagall', '.all', '.everyone'].includes(cmd)) {
             if (isGroup) {
-                let meta = await sock.groupMetadata(from);
-                let p = meta.participants.map(x => x.id);
-                let t = `📢 *Tag All Announcement*\n\n`;
-                p.forEach(x => t += `@${x.split('@')[0]} `);
-                await sock.sendMessage(from, { text: `${t}\n\n> 👑 *Owner:* ${OWNER_NAME}`, mentions: p }, { quoted: m });
+                let meta = await getCachedGroupMetadata(sock, from);
+                if (meta) {
+                    let p = meta.participants.map(x => x.id);
+                    let t = `📢 *Tag All Announcement*\n\n`;
+                    p.forEach(x => t += `@${x.split('@')[0]} `);
+                    await sock.sendMessage(from, { text: `${t}\n\n> 👑 *Owner:* ${OWNER_NAME}`, mentions: p }, { quoted: m });
+                }
             } else {
                 await reply("❌ only use in groups.");
             }
@@ -955,9 +978,11 @@ function setupWhatsAppEvents(sock) {
 
         if (['.hidetag', '.htag', '.htagall', '.silenttag'].includes(cmd)) {
             if (isGroup) {
-                let meta = await sock.groupMetadata(from);
-                let all = meta.participants.map(x => x.id);
-                await sock.sendMessage(from, { text: `${queryText || "Attention Everyone! 🦅"}\n\n> 👑 *Owner:* ${OWNER_NAME}`, mentions: all }, { quoted: m });
+                let meta = await getCachedGroupMetadata(sock, from);
+                if (meta) {
+                    let all = meta.participants.map(x => x.id);
+                    await sock.sendMessage(from, { text: `${queryText || "Attention Everyone! 🦅"}\n\n> 👑 *Owner:* ${OWNER_NAME}`, mentions: all }, { quoted: m });
+                }
             } else {
                 await reply("❌ only use in groups.");
             }
@@ -1047,8 +1072,10 @@ function setupWhatsAppEvents(sock) {
 
         if (['.gcinfo', '.ginfo', '.groupinfo'].includes(cmd)) {
             if (isGroup) {
-                let meta = await sock.groupMetadata(from);
-                return reply(`👥 *Group Info:*\n\n📌 *Name:* ${meta.subject}\n🆔 *JID:* ${meta.id}\n👑 *Members:* ${meta.participants.length}\n📝 *Description:* ${meta.desc || 'No description'}`);
+                let meta = await getCachedGroupMetadata(sock, from);
+                if (meta) {
+                    return reply(`👥 *Group Info:*\n\n📌 *Name:* ${meta.subject}\n🆔 *JID:* ${meta.id}\n👑 *Members:* ${meta.participants.length}\n📝 *Description:* ${meta.desc || 'No description'}`);
+                }
             }
             return;
         }
@@ -1096,7 +1123,9 @@ function setupWhatsAppEvents(sock) {
             try {
                 const stream = await downloadMediaMessage({ message: q }, 'buffer', {});
                 await sock.sendMessage(from, { image: stream, caption: `Converted Sticker to Image` }, { quoted: m });
-            } catch (e) {}
+            } catch (e) {
+                await reply("❌ Sticker convert nahi ho saka.");
+            }
             return;
         }
 
@@ -1187,7 +1216,8 @@ function setupWhatsAppEvents(sock) {
             return reply(`✨ *${cmd.toUpperCase().replace('.', '')} STYLE:*\n\n${styled}`);
         }
 
-        if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.facebook', '.fb', '.fbdl', '.ig', '.img', '.imgdl', '.insta', '.instagram', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tomp3', '.tovn', '.tovoice', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.yts', '.ytsearch'].includes(cmd)) {
+        // ==================== OTHER DOWNLOADERS ====================
+        if (['.alldl', '.capcut', '.capcutdl', '.cc', '.extractaudio', '.fbdl', '.img', '.imgdl', '.mp3', '.pic', '.repost', '.reposts', '.sp', '.spotify', '.tomp3', '.tovn', '.tovoice', '.ttrepost', '.twit', '.twitter', '.v2mp3', '.vn', '.xdl', '.youtube', '.yt', '.ytdl', '.yts', '.ytsearch'].includes(cmd)) {
             if (!queryText) return reply(`📥 Link provide karein! Example: \`${cmd} https://...\``);
             return reply(`📥 *${cmd} Downloader:* Media Link Received.\nProcessing: \`${queryText}\`\nMedia stream prepared!`);
         }
@@ -1209,7 +1239,7 @@ function setupWhatsAppEvents(sock) {
                              `👑 *Owner Name:* ${OWNER_NAME}\n` +
                              `⚙️ *Prefix:* [ . ]\n` +
                              `🔒 *Private Mode:* ${botSettings.privatemode ? 'ON (Locked) 🔒' : 'OFF (Public) 🔓'}\n` +
-                             `⚡ *Status:* Online ✅\n` +
+                             `⚡ *Status:* 24/7 Multi-Client Online ✅\n` +
                              `📜 *Total Commands:* 250+ Loaded & Functional\n\n` +
 
                              `╭─── ❖ *👑 OWNER COMMANDS* ❖\n` +
@@ -1552,42 +1582,39 @@ function setupWhatsAppEvents(sock) {
                              `│ ✦ 5. .tiktok\n` +
                              `│ ✦ 6. .ytmp4\n` +
                              `│ ✦ 7. .video\n` +
-                             `│ ✦ 8. .alldl\n` +
-                             `│ ✦ 9. .capcut\n` +
-                             `│ ✦ 10. .capcutdl\n` +
-                             `│ ✦ 11. .cc\n` +
-                             `│ ✦ 12. .extractaudio\n` +
-                             `│ ✦ 13. .facebook\n` +
-                             `│ ✦ 14. .fb\n` +
-                             `│ ✦ 15. .fbdl\n` +
-                             `│ ✦ 16. .ig\n` +
-                             `│ ✦ 17. .img\n` +
-                             `│ ✦ 18. .imgdl\n` +
-                             `│ ✦ 19. .insta\n` +
-                             `│ ✦ 20. .instagram\n` +
+                             `│ ✦ 8. .fb\n` +
+                             `│ ✦ 9. .facebook\n` +
+                             `│ ✦ 10. .ig\n` +
+                             `│ ✦ 11. .insta\n` +
+                             `│ ✦ 12. .instagram\n` +
+                             `│ ✦ 13. .alldl\n` +
+                             `│ ✦ 14. .capcut\n` +
+                             `│ ✦ 15. .capcutdl\n` +
+                             `│ ✦ 16. .cc\n` +
+                             `│ ✦ 17. .extractaudio\n` +
+                             `│ ✦ 18. .fbdl\n` +
+                             `│ ✦ 19. .img\n` +
+                             `│ ✦ 20. .imgdl\n` +
                              `│ ✦ 21. .mp3\n` +
                              `│ ✦ 22. .pic\n` +
                              `│ ✦ 23. .repost\n` +
                              `│ ✦ 24. .reposts\n` +
                              `│ ✦ 25. .sp\n` +
                              `│ ✦ 26. .spotify\n` +
-                             `│ ✦ 27. .tik\n` +
-                             `│ ✦ 28. .tomp3\n` +
-                             `│ ✦ 29. .tovn\n` +
-                             `│ ✦ 30. .tovoice\n` +
-                             `│ ✦ 31. .tt\n` +
-                             `│ ✦ 32. .ttrepost\n` +
-                             `│ ✦ 33. .twit\n` +
-                             `│ ✦ 34. .twitter\n` +
-                             `│ ✦ 35. .v2mp3\n` +
-                             `│ ✦ 36. .vn\n` +
-                             `│ ✦ 37. .xdl\n` +
-                             `│ ✦ 38. .youtube\n` +
-                             `│ ✦ 39. .yt\n` +
-                             `│ ✦ 40. .ytdl\n` +
-                             `│ ✦ 41. .ytmp3\n` +
-                             `│ ✦ 42. .yts\n` +
-                             `│ ✦ 43. .ytsearch\n` +
+                             `│ ✦ 27. .tomp3\n` +
+                             `│ ✦ 28. .tovn\n` +
+                             `│ ✦ 29. .tovoice\n` +
+                             `│ ✦ 30. .ttrepost\n` +
+                             `│ ✦ 31. .twit\n` +
+                             `│ ✦ 32. .twitter\n` +
+                             `│ ✦ 33. .v2mp3\n` +
+                             `│ ✦ 34. .vn\n` +
+                             `│ ✦ 35. .xdl\n` +
+                             `│ ✦ 36. .youtube\n` +
+                             `│ ✦ 37. .yt\n` +
+                             `│ ✦ 38. .ytdl\n` +
+                             `│ ✦ 39. .yts\n` +
+                             `│ ✦ 40. .ytsearch\n` +
                              `╰───────────────────────────\n\n` +
 
                              `╭─── ❖ *📢 CHANNELS COMMANDS* ❖\n` +
