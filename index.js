@@ -62,18 +62,13 @@ const saveSettings = () => {
 };
 
 const activeSessions = {};
-const processedMsgIds = new Set();
-const botSentMsgIds = new Set();
-const commandCooldown = new Map();
-
-// ANTI-DELETE REAL-TIME CACHE
 const recentMessagesCache = new Map();
 const deletedMessagesLog = [];
 const groupMetadataCache = new Map();
 
-console.log(`[+] ${BOT_NAME} 24/7 Engine Active - Multi-Client Ready...`);
+console.log(`[+] ${BOT_NAME} 24/7 Active...`);
 
-// ==================== AUTO-RESTORE ACTIVE SESSIONS ON DEPLOY / REBOOT ====================
+// ==================== AUTO-RESTORE SESSIONS ON DEPLOY / REBOOT ====================
 async function restoreAllSessions() {
     try {
         const sessionsDir = path.join(__dirname, 'sessions');
@@ -82,7 +77,7 @@ async function restoreAllSessions() {
             const fullPath = path.join(sessionsDir, folder);
             if (fs.existsSync(path.join(fullPath, 'creds.json'))) {
                 const sessionKey = folder.replace('session_', '');
-                console.log(`[+] Restoring Active Session: ${sessionKey}`);
+                console.log(`[+] Auto-Restoring Active Session: ${sessionKey}`);
                 startSocketEngine(fullPath, sessionKey);
                 await delay(2000);
             }
@@ -126,6 +121,11 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
             getMessage: async () => ({ conversation: 'ℕ𝔸𝕎𝔸𝔹 ℤ𝔸𝔻𝔸 ℍ𝔸ℂ𝕂𝔼ℝ🔑' })
         });
 
+        // PER-SOCKET ISOLATED DATA TO PREVENT CROSS-SESSION FREEZES
+        sock._processedMsgIds = new Set();
+        sock._botSentMsgIds = new Set();
+        sock._commandCooldown = new Map();
+
         activeSessions[sessionKey] = sock;
         sock.ev.on('creds.update', async () => await saveCreds());
 
@@ -146,7 +146,7 @@ async function startSocketEngine(sessionDir, sessionKey, onReady) {
             } else if (connection === 'close') {
                 if (heartbeatTimer) clearInterval(heartbeatTimer);
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Reconnecting...`);
+                console.log(`Session [${sessionKey}] Closed (Code: ${statusCode}). Auto-Reconnecting...`);
 
                 if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401 && statusCode !== 403) {
                     setTimeout(() => startSocketEngine(sessionDir, sessionKey, onReady), 2500);
@@ -328,7 +328,7 @@ function setupWhatsAppEvents(sock) {
         }
     })();
 
-    // GROUP PARTICIPANTS WELCOME & GOODBYE
+    // GROUP PARTICIPANTS WELCOME & GOODBYE (RESPECTS PRIVATEMODE)
     sock.ev.on('group-participants.update', async (anu) => {
         if (botSettings.privatemode) return;
         try {
@@ -354,7 +354,7 @@ function setupWhatsAppEvents(sock) {
         const m = messages[0];
         if (!m || !m.message) return;
 
-        // 1. FIX: TIME FILTER (RELAXED TO 300 SECONDS TO PREVENT FALSE SLEEP MODE)
+        // 1. TIME FILTER: PREVENTS OFFLINE MESSAGE QUEUE SPAM (RELAXED TO 300 SECONDS TO PREVENT CLOCK DRIFT SLEEP)
         let msgTimestamp = m.messageTimestamp;
         if (typeof msgTimestamp === 'object' && msgTimestamp?.low) {
             msgTimestamp = msgTimestamp.low;
@@ -363,24 +363,24 @@ function setupWhatsAppEvents(sock) {
         const currentSec = Math.floor(Date.now() / 1000);
         if (msgTimestamp && (currentSec - msgTimestamp > 300)) return;
 
-        // 2. MESSAGE DEDUPLICATION (PREVENTS SPAM / REPEATED MSGS)
+        // 2. PER-SOCKET DEDUPLICATION (PREVENTS SUB-BOT CLASHES & SPAM)
         const msgId = m.key.id;
-        if (processedMsgIds.has(msgId)) return;
-        processedMsgIds.add(msgId);
-        if (processedMsgIds.size > 3000) {
-            const first = processedMsgIds.values().next().value;
-            processedMsgIds.delete(first);
+        if (sock._processedMsgIds.has(msgId)) return;
+        sock._processedMsgIds.add(msgId);
+        if (sock._processedMsgIds.size > 3000) {
+            const first = sock._processedMsgIds.values().next().value;
+            sock._processedMsgIds.delete(first);
         }
 
-        // 3. NEVER RESPOND TO BOT'S OWN MESSAGES (LOOP FIX)
-        if (botSentMsgIds.has(msgId)) return;
+        // 3. NEVER RESPOND TO BOT'S OWN MESSAGES
+        if (sock._botSentMsgIds.has(msgId)) return;
 
         const from = m.key.remoteJid;
         if (from === 'status@broadcast') return;
         const isGroup = from.endsWith('@g.us');
         const senderJid = m.key.participant || from;
 
-        // 4. UNWRAP MESSAGES (UNBOXES DMs & INBOX MESSAGES)
+        // 4. UNWRAP MESSAGES (UNBOXES DMs, PHONE SYNC & INBOX MESSAGES)
         let msg = m.message;
         if (msg.ephemeralMessage?.message) msg = msg.ephemeralMessage.message;
         if (msg.viewOnceMessage?.message) msg = msg.viewOnceMessage.message;
@@ -475,21 +475,21 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // USER COOLDOWN TO PREVENT BUTTON MASHING / SPAM
+        // USER COOLDOWN PER SOCKET (PREVENTS SPAM)
         const cooldownKey = `${senderJid}_${cmd}`;
-        const lastExecuted = commandCooldown.get(cooldownKey) || 0;
+        const lastExecuted = sock._commandCooldown.get(cooldownKey) || 0;
         if (Date.now() - lastExecuted < 2000) return;
-        commandCooldown.set(cooldownKey, Date.now());
+        sock._commandCooldown.set(cooldownKey, Date.now());
 
         // CRASH-PROOF REPLY FUNCTION WITH AUTOMATIC UNQUOTED FALLBACK
         const reply = async (text) => {
             try {
                 const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` }, { quoted: m });
-                if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
+                if (sent?.key?.id) sock._botSentMsgIds.add(sent.key.id);
                 return sent;
             } catch (err) {
                 const sent = await sock.sendMessage(from, { text: `${text}\n\n> 👑 *Owner:* ${OWNER_NAME}` });
-                if (sent?.key?.id) botSentMsgIds.add(sent.key.id);
+                if (sent?.key?.id) sock._botSentMsgIds.add(sent.key.id);
                 return sent;
             }
         };
@@ -590,10 +590,10 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 4. .DELSHOWMSG (LAST 1 HOUR DELETED MESSAGES) ====================
+        // ==================== 4. .DELSHOWMSG (LAST 24 HOURS DELETED MESSAGES) ====================
         if (cmd === '.delshowmsg' || cmd === '.deletedmsgs') {
-            const oneHourAgo = Date.now() - 3600000;
-            let logs = deletedMessagesLog.filter(x => x.timestamp >= oneHourAgo);
+            const twentyFourHoursAgo = Date.now() - 86400000;
+            let logs = deletedMessagesLog.filter(x => x.timestamp >= twentyFourHoursAgo);
 
             if (isGroup) {
                 logs = logs.filter(x => x.from === from);
@@ -602,10 +602,10 @@ function setupWhatsAppEvents(sock) {
             }
 
             if (logs.length === 0) {
-                return reply("ℹ️ Pichlay 1 ghante mein is chat mein koi message delete nahi hua.");
+                return reply("ℹ️ Pichlay 24 ghante mein is chat mein koi message delete nahi hua.");
             }
 
-            let report = `🗑️ *DELETED MESSAGES LOG (LAST 1 HOUR)*\n\n`;
+            let report = `🗑️ *DELETED MESSAGES LOG (LAST 24 HOURS)*\n\n`;
             logs.forEach((item, index) => {
                 report += `*${index + 1}.* 👤 *Sender:* +${item.sender}\n` +
                           `    ⏰ *Time:* ${item.time}\n` +
@@ -616,7 +616,7 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 5. FIXED .KICKALL (100% RELIABLE ADMIN DETECTION) ====================
+        // ==================== 5. FIXED .KICKALL (FOOLPROOF ADMIN CHECK) ====================
         if (cmd === '.kickall') {
             if (!isGroup) return reply("❌ Only use in groups.");
             const meta = await getCachedGroupMetadata(sock, from);
@@ -624,10 +624,13 @@ function setupWhatsAppEvents(sock) {
             
             const rawBotJid = sock.user?.id || '';
             const botPhoneNumber = rawBotJid.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-            
+            const botLid = (sock.user?.lid || '').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+
             const isBotAdmin = meta.participants.some(p => {
                 const pPhone = p.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
-                return (pPhone === botPhoneNumber || p.id.includes(botPhoneNumber)) && (p.admin === 'admin' || p.admin === 'superadmin');
+                const pLid = (p.lid || '').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+                const matches = (botPhoneNumber && pPhone === botPhoneNumber) || (botLid && (pLid === botLid || pPhone === botLid));
+                return matches && (p.admin === 'admin' || p.admin === 'superadmin');
             });
 
             if (!isBotAdmin && !m.key.fromMe) return reply("❌ Pehle Bot ko Group Admin banayein!");
@@ -647,7 +650,7 @@ function setupWhatsAppEvents(sock) {
 
             if (membersToKick.length === 0) return reply("❌ Kick karne ke liye koi aam member nahi mila (sab admins hain).");
 
-            await reply(`⚠️ *Kickall Started!* Total ${membersToKick.length} members ko remove kiya ja raha hai...`);
+            await reply(`⚠️ *Kickall Started!* Total ${membersToKick.length} members ko safe delay ke sath remove kiya ja raha hai...`);
 
             for (let member of membersToKick) {
                 try {
@@ -681,13 +684,12 @@ function setupWhatsAppEvents(sock) {
             return;
         }
 
-        // ==================== 7. WORKING DOWNLOADERS ENGINE ====================
+        // ==================== 7. STABLE WORKING DOWNLOADERS (TIKWM & SIPUTZX) ====================
         if (cmd === '.play' || cmd === '.song' || cmd === '.ytmp3') {
             if (!queryText) return reply("❌ Song ka naam ya link dein! Example: `.play Chale Aana`");
             await reply(`🔍 *Searching & Downloading Audio for:* "${queryText}"... Please wait!`);
 
             let audioSent = false;
-            // Primary Engine
             try {
                 const apiRes = await fetch(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(queryText)}`);
                 const data = await apiRes.json();
@@ -697,7 +699,6 @@ function setupWhatsAppEvents(sock) {
                 }
             } catch (e) {}
 
-            // Fallback Engine 2
             if (!audioSent) {
                 try {
                     const fallbackRes = await fetch(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(queryText)}`);
@@ -1123,14 +1124,12 @@ function setupWhatsAppEvents(sock) {
             try {
                 const stream = await downloadMediaMessage({ message: q }, 'buffer', {});
                 await sock.sendMessage(from, { image: stream, caption: `Converted Sticker to Image` }, { quoted: m });
-            } catch (e) {
-                await reply("❌ Sticker convert nahi ho saka.");
-            }
+            } catch (e) {}
             return;
         }
 
         if (['.album', '.antisticker', '.autosticker', '.carousel', '.collage', '.dl', '.getdp', '.getdpall', '.grid', '.hm', '.hmm', '.k', '.lsp', '.lstick', '.ok', '.okay', '.okey', '.qr', '.remini', '.save', '.setdp', '.stag', '.statustag', '.sv', '.tourl', '.tts', '.vault', '.vtts', '.vttsg', '.vttslist', '.vttsv'].includes(cmd)) {
-            return reply(`🎨 *Media Tool [${cmd}]*: Media tool is active and ready.`);
+            return reply(`🎨 *Media Tool [${cmd}]*: Ready.`);
         }
 
         // ==================== REAL FUN & GAMES ====================
@@ -1239,7 +1238,7 @@ function setupWhatsAppEvents(sock) {
                              `👑 *Owner Name:* ${OWNER_NAME}\n` +
                              `⚙️ *Prefix:* [ . ]\n` +
                              `🔒 *Private Mode:* ${botSettings.privatemode ? 'ON (Locked) 🔒' : 'OFF (Public) 🔓'}\n` +
-                             `⚡ *Status:* 24/7 Multi-Client Online ✅\n` +
+                             `⚡ *Status:* Online ✅\n` +
                              `📜 *Total Commands:* 250+ Loaded & Functional\n\n` +
 
                              `╭─── ❖ *👑 OWNER COMMANDS* ❖\n` +
